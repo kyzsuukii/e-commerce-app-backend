@@ -86,11 +86,9 @@ router.post(
         JSON.stringify(payload),
         `${process.env.JWT_SECRET_KEY}`
       );
-
-      res.cookie("token", jwt, { httpOnly: true });
-
       res.json({
         msg: "Login success",
+        token: jwt,
       });
     } catch (e) {
       throw e;
