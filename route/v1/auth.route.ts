@@ -66,7 +66,7 @@ router.post(
       }
       const db = await conn();
       const [rows]: any = await db.execute(
-        "SELECT password, id FROM auth WHERE email = ? LIMIT 1",
+        "SELECT id, password, role FROM auth WHERE email = ? LIMIT 1",
         [email]
       );
       if (!rows[0]) {
@@ -86,10 +86,12 @@ router.post(
         JSON.stringify(payload),
         `${process.env.JWT_SECRET_KEY}`
       );
-      res.json({
-        msg: "Login success",
-        token: jwt,
-      });
+
+      if (data.role === "ADMIN") {
+        res.json({ msg: "Login success", token: jwt, isAdmin: true });
+      } else {
+        res.json({ msg: "Login success", token: jwt });
+      }
     } catch (e) {
       throw e;
     }

@@ -11,8 +11,8 @@ router.get(
   "/me",
   passport.authenticate("jwt", { session: false }),
   (req: any, res) => {
-    const { id, email } = req.user;
-    res.json({ id, email });
+    const { id, email, role } = req.user;
+    res.json({ id, email, role });
   }
 );
 
