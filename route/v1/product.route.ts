@@ -39,7 +39,7 @@ const upload = multer({
     },
 });
 
-route.get("/all", async (req, res) => {
+route.get("/all", passport.authenticate("jwt", {session: false}), async (req, res) => {
     const {limit: queryLimit} = req.query
     try {
         const db = await conn();
@@ -59,7 +59,7 @@ route.get("/all", async (req, res) => {
     }
 });
 
-route.get("/get/:id", async (req, res) => {
+route.get("/get/:id", passport.authenticate("jwt", {session: false}), async (req, res) => {
     const {id} = req.params;
 
     try {
@@ -75,7 +75,7 @@ route.get("/get/:id", async (req, res) => {
     }
 })
 
-route.get("/category/:categoryName", async (req, res) => {
+route.get("/category/:categoryName", passport.authenticate("jwt", {session: false}), async (req, res) => {
     const {categoryName} = req.params;
 
     try {
@@ -90,27 +90,6 @@ route.get("/category/:categoryName", async (req, res) => {
         res.status(500).json({errors: [{msg: "Error fetching products"}]});
     }
 })
-
-route.get("/category/:categoryName", async (req, res) => {
-    const categoryName = req.params.categoryName;
-    try {
-        const db = await conn();
-        const [products] = await db.execute(
-            'SELECT p.*, c.name AS category_name FROM products p INNER JOIN category c ON p.category_id = c.id WHERE c.name = ?',
-            [categoryName]
-        );
-
-        // Check if products in the given category exist
-        if (products) {
-            return res.status(404).json({errors: [{msg: "Products not found in the specified category"}]});
-        }
-
-        res.json(products);
-    } catch (error) {
-        console.error("Error fetching products:", error);
-        res.status(500).json({errors: [{msg: "Error fetching products"}]});
-    }
-});
 
 route.post(
     "/upload",
