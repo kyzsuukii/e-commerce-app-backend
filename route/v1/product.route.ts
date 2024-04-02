@@ -43,7 +43,7 @@ route.get("/all", async (req, res) => {
     const {limit: queryLimit} = req.query
     try {
         const db = await conn();
-        let query = "SELECT * FROM products";
+        let query = "SELECT id, title, description, price, stock, image_path  FROM products";
         let queryParams = [];
         const limit = queryLimit ? parseInt(`${queryLimit}`) : null;
 
@@ -55,6 +55,59 @@ route.get("/all", async (req, res) => {
 
         res.json(products);
     } catch (error) {
+        res.status(500).json({errors: [{msg: "Error fetching products"}]});
+    }
+});
+
+route.get("/get/:id", async (req, res) => {
+    const {id} = req.params;
+
+    try {
+        const db = await conn();
+        const [product] = await db.execute(
+            "SELECT p.title, p.description, p.price, p.stock, p.image_path, c.name AS category_name FROM products p LEFT JOIN category c ON p.category_id = c.id WHERE p.id = ?",
+            [id]
+        );
+
+        res.json(product);
+    } catch (error) {
+        res.status(500).json({errors: [{msg: "Error fetching products"}]});
+    }
+})
+
+route.get("/category/:categoryName", async (req, res) => {
+    const {categoryName} = req.params;
+
+    try {
+        const db = await conn();
+        const [product] = await db.execute(
+            "SELECT p.id, p.title, p.description, p.price, p.stock, p.image_path, c.name AS category_name FROM products p INNER JOIN category c ON p.category_id = c.id WHERE c.name = ?",
+            [categoryName]
+        );
+
+        res.json(product);
+    } catch (error) {
+        res.status(500).json({errors: [{msg: "Error fetching products"}]});
+    }
+})
+
+route.get("/category/:categoryName", async (req, res) => {
+    const categoryName = req.params.categoryName;
+    try {
+        const db = await conn();
+        const [products] = await db.execute(
+            'SELECT p.*, c.name AS category_name FROM products p INNER JOIN category c ON p.category_id = c.id WHERE c.name = ?',
+            [categoryName]
+        );
+
+        // Check if products in the given category exist
+        if (products) {
+            return res.status(404).json({errors: [{msg: "Products not found in the specified category"}]});
+        }
+
+        res.json(products);
+    } catch (error) {
+        console.error("Error fetching products:", error);
         res.status(500).json({errors: [{msg: "Error fetching products"}]});
     }
 });
