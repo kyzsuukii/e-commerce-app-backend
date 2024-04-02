@@ -1,6 +1,5 @@
 import express from "express";
 import v1Route from "./route/v1";
-import passport from "passport";
 import { config } from "dotenv";
 import { passportJwt } from "./lib/passport";
 import cors from "cors";
@@ -18,14 +17,7 @@ app.get("/", (req, res) => {
   res.send("Hello World!");
 });
 
-app.get(
-  "/me",
-  passport.authenticate("jwt", { session: false }),
-  (req: any, res) => {
-    const { id, email } = req.user;
-    res.json({ id, email });
-  }
-);
+app.use("/img", express.static("img"));
 
 app.use("/v1", v1Route);
 
