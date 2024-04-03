@@ -52,7 +52,8 @@ route.get(
     try {
       const db = await conn();
       let query =
-        "SELECT id, title, description, price, stock, image_path  FROM products";
+        "SELECT pc.product_id AS id,  p.name, p.description, p.price, p.stock, p.thumbnail, c.name AS category_name FROM product_category pc JOIN products p ON pc.product_id = p.id JOIN category c ON pc.category_id = c.id";
+
       const limit = queryLimit ? parseInt(`${queryLimit}`) : null;
 
       if (limit) {
@@ -82,7 +83,7 @@ route.get(
     try {
       const db = await conn();
       const [product] = await db.execute(
-        "SELECT p.title, p.description, p.price, p.stock, p.image_path, c.name AS category_name FROM products p LEFT JOIN category c ON p.category_id = c.id WHERE p.id = ?",
+        "SELECT p.id, p.name AS product_name, p.description, p.price, p.stock, p.thumbnail, c.name AS category_name FROM product_category pc JOIN products p ON pc.product_id = p.id JOIN category c ON pc.category_id = c.id WHERE pc.product_id IN (?);",
         [id],
       );
 
@@ -108,7 +109,7 @@ route.get(
     try {
       const db = await conn();
       const [product] = await db.execute(
-        "SELECT p.id, p.title, p.description, p.price, p.stock, p.image_path, c.name AS category_name FROM products p INNER JOIN category c ON p.category_id = c.id WHERE c.name = ?",
+        "SELECT p.id, p.name, p.description, p.price, p.stock, p.thumbnail, c.name AS category_name FROM products p JOIN product_category pc ON p.id = pc.product_id JOIN category c ON pc.category_id = c.id WHERE c.name = ?",
         [categoryName],
       );
 
@@ -122,7 +123,7 @@ route.get(
 route.post(
   "/upload",
   passport.authenticate("jwt", { session: false }),
-  upload.single("productImages"),
+  upload.single("thumbnail"),
   async (req: any, res) => {
     if (!req.file) {
       return res.status(400).json({ errors: [{ msg: "No file uploaded" }] });
@@ -135,31 +136,27 @@ route.post(
     }
 
     const file = req.file;
-
-    const { title, category, description, price, stock } = req.body;
+    const { name, category, description, price, stock } = req.body;
 
     try {
       const db = await conn();
-      let [categoryResult]: any = await db.execute(
-        "SELECT id FROM category WHERE name = ?",
+      const [insertedProduct]: any = await db.execute(
+        "INSERT INTO products (name, description, price, stock, thumbnail) VALUES (?, ?, ?, ?, ?)",
+        [name, description, price, stock, file.path],
+      );
+
+      const { insertId: productId } = insertedProduct;
+
+      const [insertedCategory]: any = await db.execute(
+        "INSERT INTO category (name) VALUES (?) ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id)",
         [category],
       );
 
-      let categoryId;
-
-      if (categoryResult.length > 0) {
-        categoryId = categoryResult[0].id;
-      } else {
-        const [insertedCategory]: any = await db.execute(
-          "INSERT INTO category (name) VALUES (?) LIMIT 1",
-          [category],
-        );
-        categoryId = insertedCategory.insertId;
-      }
+      const { insertId: categoryId } = insertedCategory;
 
       await db.execute(
-        "INSERT INTO products (title, description, price, stock, image_path, category_id) VALUES (?, ?, ?, ?, ?, ?)",
-        [title, description, price, stock, file.path, categoryId],
+        "INSERT INTO product_category (product_id, category_id) VALUES (?, ?)",
+        [productId, categoryId],
       );
 
       res.json({ msg: "Product uploaded and saved successfully" });
