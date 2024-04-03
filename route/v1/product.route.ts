@@ -60,7 +60,11 @@ route.get(
         query += ` LIMIT ${limit}`;
       }
 
-      const [products] = await db.execute(query);
+      const [products]: any = await db.execute(query);
+
+      if (!products[0]) {
+        return res.status(404).json({ errors: [{ msg: "Product not Found" }] });
+      }
 
       res.json(products);
     } catch (error) {
@@ -82,12 +86,16 @@ route.get(
 
     try {
       const db = await conn();
-      const [product] = await db.execute(
+      const [product]: any = await db.execute(
         "SELECT p.id, p.name AS product_name, p.description, p.price, p.stock, p.thumbnail, c.name AS category_name FROM product_category pc JOIN products p ON pc.product_id = p.id JOIN category c ON pc.category_id = c.id WHERE pc.product_id IN (?);",
         [id],
       );
 
-      res.json(product);
+      if (!product[0]) {
+        return res.status(404).json({ errors: [{ msg: "Product not Found" }] });
+      }
+
+      res.json(product[0]);
     } catch (error) {
       res.status(500).json({ errors: [{ msg: "Error fetching products" }] });
     }
@@ -108,10 +116,14 @@ route.get(
 
     try {
       const db = await conn();
-      const [product] = await db.execute(
+      const [product]: any = await db.execute(
         "SELECT p.id, p.name, p.description, p.price, p.stock, p.thumbnail, c.name AS category_name FROM products p JOIN product_category pc ON p.id = pc.product_id JOIN category c ON pc.category_id = c.id WHERE c.name = ?",
         [categoryName],
       );
+
+      if (!product[0]) {
+        return res.status(404).json({ errors: [{ msg: "Product not Found" }] });
+      }
 
       res.json(product);
     } catch (error) {
