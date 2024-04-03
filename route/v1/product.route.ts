@@ -87,7 +87,7 @@ route.get(
     try {
       const db = await conn();
       const [product]: any = await db.execute(
-        "SELECT p.id, p.name AS product_name, p.description, p.price, p.stock, p.thumbnail, c.name AS category_name FROM product_category pc JOIN products p ON pc.product_id = p.id JOIN category c ON pc.category_id = c.id WHERE pc.product_id IN (?);",
+        "SELECT p.id, p.name, p.description, p.price, p.stock, p.thumbnail, c.name AS category_name FROM product_category pc JOIN products p ON pc.product_id = p.id JOIN category c ON pc.category_id = c.id WHERE pc.product_id IN (?);",
         [id],
       );
 
