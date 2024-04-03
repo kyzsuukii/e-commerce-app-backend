@@ -16,7 +16,7 @@ router.post(
       const db = await conn();
       const [rows]: any = await db.execute(
         "SELECT email FROM auth WHERE email = ? LIMIT 1",
-        [value]
+        [value],
       );
       if (rows[0]) {
         throw new Error("Email already exists");
@@ -43,13 +43,13 @@ router.post(
       const db = await conn();
       const [rows] = await db.execute(
         "INSERT INTO auth (email, password) VALUE (?, ?)",
-        [email, hashPassword]
+        [email, hashPassword],
       );
       res.json({ msg: "Register success" });
     } catch (e) {
       throw e;
     }
-  }
+  },
 );
 
 router.post(
@@ -67,7 +67,7 @@ router.post(
       const db = await conn();
       const [rows]: any = await db.execute(
         "SELECT id, password, role FROM auth WHERE email = ? LIMIT 1",
-        [email]
+        [email],
       );
       if (!rows[0]) {
         return res.status(404).json({ errors: [{ msg: "Email not found" }] });
@@ -84,7 +84,7 @@ router.post(
 
       const jwt = generateJwt(
         JSON.stringify(payload),
-        `${process.env.JWT_SECRET_KEY}`
+        `${process.env.JWT_SECRET_KEY}`,
       );
 
       if (data.role === "ADMIN") {
@@ -95,7 +95,7 @@ router.post(
     } catch (e) {
       throw e;
     }
-  }
+  },
 );
 
 export default router;

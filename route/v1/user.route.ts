@@ -13,7 +13,7 @@ router.get(
   (req: any, res) => {
     const { id, email, role } = req.user;
     res.json({ id, email, role });
-  }
+  },
 );
 
 router.put(
@@ -35,7 +35,7 @@ router.put(
       const db = await conn();
       const [rows]: any = await db.execute(
         "SELECT password FROM auth WHERE id = ? LIMIT 1",
-        [userId]
+        [userId],
       );
 
       if (!rows[0]) {
@@ -61,7 +61,7 @@ router.put(
     } catch (e) {
       throw e;
     }
-  }
+  },
 );
 
 export default router;
