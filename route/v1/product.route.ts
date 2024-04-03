@@ -39,7 +39,10 @@ const upload = multer({
     },
 });
 
-route.get("/all", passport.authenticate("jwt", {session: false}), async (req, res) => {
+route.get("/all", passport.authenticate("jwt", {session: false}), async (req: any, res) => {
+    if (req.user?.role !== 'ADMIN') {
+        res.json({errors: [{msg: "You do not have administrative privileges"}]})
+    }
     const {limit: queryLimit} = req.query
     try {
         const db = await conn();
@@ -59,7 +62,10 @@ route.get("/all", passport.authenticate("jwt", {session: false}), async (req, re
     }
 });
 
-route.get("/get/:id", passport.authenticate("jwt", {session: false}), async (req, res) => {
+route.get("/get/:id", passport.authenticate("jwt", {session: false}), async (req: any, res) => {
+    if (req.user?.role !== 'ADMIN') {
+        res.json({errors: [{msg: "You do not have administrative privileges"}]})
+    }
     const {id} = req.params;
 
     try {
@@ -75,7 +81,11 @@ route.get("/get/:id", passport.authenticate("jwt", {session: false}), async (req
     }
 })
 
-route.get("/category/:categoryName", passport.authenticate("jwt", {session: false}), async (req, res) => {
+route.get("/category/:categoryName", passport.authenticate("jwt", {session: false}), async (req: any, res) => {
+    if (req.user?.role !== 'ADMIN') {
+        res.json({errors: [{msg: "You do not have administrative privileges"}]})
+    }
+
     const {categoryName} = req.params;
 
     try {
@@ -95,9 +105,13 @@ route.post(
     "/upload",
     passport.authenticate("jwt", {session: false}),
     upload.single("productImages"),
-    async (req, res) => {
+    async (req: any, res) => {
         if (!req.file) {
             return res.status(400).json({errors: [{msg: "No file uploaded"}]});
+        }
+
+        if (req.user?.role !== 'ADMIN') {
+            res.json({errors: [{msg: "You do not have administrative privileges"}]})
         }
 
         const file = req.file;
