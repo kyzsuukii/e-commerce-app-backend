@@ -132,6 +132,52 @@ route.get(
   },
 );
 
+route.patch(
+  "/update/:id",
+  passport.authenticate("jwt", { session: false }),
+  async (req: any, res) => {
+    if (req.user?.role !== "ADMIN") {
+      res.json({
+        errors: [{ msg: "You do not have administrative privileges" }],
+      });
+    }
+
+    const { id } = req.query;
+  },
+);
+route.delete(
+  "/delete",
+  passport.authenticate("jwt", { session: false }),
+  async (req: any, res) => {
+    if (req.user?.role !== "ADMIN") {
+      res.json({
+        errors: [{ msg: "You do not have administrative privileges" }],
+      });
+    }
+
+    const { id } = req.body;
+
+    try {
+      const db = await conn();
+      const [result]: any = await db.query(
+        "DELETE FROM products WHERE id = ?",
+        [id],
+      );
+
+      if (result.affectedRows === 1) {
+        return res.json({ message: "Product deleted successfully" });
+      } else {
+        return res.status(404).json({ errors: [{ msg: "Product not found" }] });
+      }
+    } catch (error) {
+      console.error("Error deleting product:", error);
+      return res
+        .status(500)
+        .json({ errors: [{ msg: "Internal server error" }] });
+    }
+  },
+);
+
 route.post(
   "/upload",
   passport.authenticate("jwt", { session: false }),
