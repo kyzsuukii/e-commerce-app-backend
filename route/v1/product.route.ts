@@ -149,6 +149,7 @@ route.put(
 route.delete(
   "/delete",
   passport.authenticate("jwt", { session: false }),
+  body("id").isInt().notEmpty(),
   async (req: any, res) => {
     if (req.user?.role !== "ADMIN") {
       return res.status(403).json({
@@ -158,16 +159,35 @@ route.delete(
 
     const { id } = req.body;
 
-    console.log(id);
-
     try {
       const db = await conn();
+
+      const [product]: any = await db.query(
+        "SELECT category_id FROM product_category WHERE product_id = ?",
+        [id],
+      );
+
+      if (product.length === 0) {
+        return res.status(404).json({ errors: [{ msg: "Product not found" }] });
+      }
+
+      const categoryId = product[0].category_id;
+
       const [result]: any = await db.query(
         "DELETE FROM products WHERE id = ?",
         [id],
       );
 
       if (result.affectedRows === 1) {
+        const [otherProducts]: any = await db.query(
+          "SELECT COUNT(*) AS count FROM product_category WHERE category_id = ? AND product_id != ?",
+          [categoryId, id],
+        );
+
+        if (otherProducts[0].count === 0) {
+          await db.query("DELETE FROM category WHERE id = ?", [categoryId]);
+        }
+
         return res.json({ message: "Product deleted successfully" });
       } else {
         return res.status(404).json({ errors: [{ msg: "Product not found" }] });
