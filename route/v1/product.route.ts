@@ -136,6 +136,19 @@ route.get(
 route.put(
   "/update",
   passport.authenticate("jwt", { session: false }),
+  body("name").isString(),
+  body("category").isString(),
+  body("price")
+    .toInt()
+    .isNumeric()
+    .isLength({ min: 1, max: 6 })
+    .custom((value) => value >= 0),
+  body("stock")
+    .toInt()
+    .isNumeric()
+    .isLength({ min: 1, max: 3 })
+    .custom((value) => value >= 0),
+  body("description").isString(),
   async (req: any, res) => {
     if (req.user?.role !== "ADMIN") {
       return res.status(403).json({
@@ -143,9 +156,10 @@ route.put(
       });
     }
 
-    const { id } = req.body;
+    const { name, category, description, price, stock } = req.body;
   },
 );
+
 route.delete(
   "/delete",
   passport.authenticate("jwt", { session: false }),
@@ -207,8 +221,16 @@ route.post(
   upload.single("thumbnail"),
   body("name").isString(),
   body("category").isString(),
-  body("price").toInt().isNumeric().isLength({ min: 1, max: 6 }),
-  body("stock").toInt().isNumeric().isLength({ min: 1, max: 3 }),
+  body("price")
+    .toInt()
+    .isNumeric()
+    .isLength({ min: 1, max: 6 })
+    .custom((value) => value >= 0),
+  body("stock")
+    .toInt()
+    .isNumeric()
+    .isLength({ min: 1, max: 3 })
+    .custom((value) => value >= 0),
   body("description").isString(),
   async (req: any, res) => {
     console.log(req.body);
