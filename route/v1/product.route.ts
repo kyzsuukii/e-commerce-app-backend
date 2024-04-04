@@ -3,6 +3,7 @@ import passport from "passport";
 import multer from "multer";
 import * as path from "path";
 import { conn } from "../../lib/db";
+import { body, validationResult } from "express-validator";
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = [
@@ -44,7 +45,7 @@ route.get(
   passport.authenticate("jwt", { session: false }),
   async (req: any, res) => {
     if (req.user?.role !== "ADMIN") {
-      res.json({
+      return res.status(403).json({
         errors: [{ msg: "You do not have administrative privileges" }],
       });
     }
@@ -78,7 +79,7 @@ route.get(
   passport.authenticate("jwt", { session: false }),
   async (req: any, res) => {
     if (req.user?.role !== "ADMIN") {
-      res.json({
+      return res.status(403).json({
         errors: [{ msg: "You do not have administrative privileges" }],
       });
     }
@@ -107,7 +108,7 @@ route.get(
   passport.authenticate("jwt", { session: false }),
   async (req: any, res) => {
     if (req.user?.role !== "ADMIN") {
-      res.json({
+      return res.status(403).json({
         errors: [{ msg: "You do not have administrative privileges" }],
       });
     }
@@ -132,17 +133,17 @@ route.get(
   },
 );
 
-route.patch(
-  "/update/:id",
+route.put(
+  "/update",
   passport.authenticate("jwt", { session: false }),
   async (req: any, res) => {
     if (req.user?.role !== "ADMIN") {
-      res.json({
+      return res.status(403).json({
         errors: [{ msg: "You do not have administrative privileges" }],
       });
     }
 
-    const { id } = req.query;
+    const { id } = req.body;
   },
 );
 route.delete(
@@ -150,12 +151,14 @@ route.delete(
   passport.authenticate("jwt", { session: false }),
   async (req: any, res) => {
     if (req.user?.role !== "ADMIN") {
-      res.json({
+      return res.status(403).json({
         errors: [{ msg: "You do not have administrative privileges" }],
       });
     }
 
     const { id } = req.body;
+
+    console.log(id);
 
     try {
       const db = await conn();
@@ -182,15 +185,24 @@ route.post(
   "/upload",
   passport.authenticate("jwt", { session: false }),
   upload.single("thumbnail"),
+  body("name").isString(),
+  body("category").isString(),
+  body("price").toInt().isNumeric().isLength({ min: 1, max: 6 }),
+  body("stock").toInt().isNumeric().isLength({ min: 1, max: 3 }),
+  body("description").isString(),
   async (req: any, res) => {
-    if (!req.file) {
-      return res.status(400).json({ errors: [{ msg: "No file uploaded" }] });
-    }
-
+    console.log(req.body);
     if (req.user?.role !== "ADMIN") {
-      res.json({
+      return res.status(403).json({
         errors: [{ msg: "You do not have administrative privileges" }],
       });
+    }
+    const result = validationResult(req);
+    if (!result.isEmpty()) {
+      return res.status(400).json({ errors: result.array() });
+    }
+    if (!req.file) {
+      return res.status(400).json({ errors: [{ msg: "No file uploaded" }] });
     }
 
     const file = req.file;
