@@ -95,7 +95,7 @@ route.get(
 
     try {
       const [product]: any = await db.execute(
-        "SELECT p.id, p.name, p.description, p.price, p.stock, p.thumbnail, (SELECT GROUP_CONCAT(c.name SEPARATOR ', ') FROM product_category pc JOIN category c ON pc.category_id = c.id WHERE pc.product_id = p.id) AS category_names FROM products p WHERE p.id = ?",
+        "SELECT p.id, p.name, p.description, p.price, p.stock, p.thumbnail, (SELECT GROUP_CONCAT(c.name SEPARATOR ', ') FROM product_category pc JOIN category c ON pc.category_id = c.id WHERE pc.product_id = p.id) AS category FROM products p WHERE p.id = ?",
         [id],
       );
 
@@ -128,7 +128,7 @@ route.get(
       const { categoryName } = req.params;
 
       const [products]: any = await db.execute(
-        "SELECT p.id, p.name, p.description, p.price, p.stock, p.thumbnail, c.name AS category_name FROM products p JOIN product_category pc ON p.id = pc.product_id JOIN category c ON pc.category_id = c.id WHERE c.name = ?;",
+        "SELECT p.id, p.name, p.description, p.price, p.stock, p.thumbnail, c.name AS category FROM products p JOIN product_category pc ON p.id = pc.product_id JOIN category c ON pc.category_id = c.id WHERE c.name = ?;",
         [categoryName],
       );
 
