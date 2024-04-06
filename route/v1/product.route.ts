@@ -244,11 +244,11 @@ route.put(
       }
 
       await db.commit();
-      res.status(200).json({ msg: "Product updated successfully" });
+      return res.status(200).json({ msg: "Product updated successfully" });
     } catch (error) {
       await db.rollback();
       console.error("Error updating product:", error);
-      res.status(500).json({ errors: [{ msg: "Internal Server Error" }] });
+      return res.status(500).json({ errors: [{ msg: "Internal Server Error" }] });
     } finally {
       await db.end();
     }
