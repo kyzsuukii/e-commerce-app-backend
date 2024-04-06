@@ -143,6 +143,11 @@ route.delete(
   passport.authenticate("jwt", { session: false }),
   body("id").isInt().notEmpty(),
   async (req: any, res) => {
+    if (req.user?.role !== "ADMIN") {
+      return res.status(403).json({
+        errors: [{ msg: "You do not have administrative privileges" }],
+      });
+    }
     const { id } = req.body;
     const db = await conn();
 
