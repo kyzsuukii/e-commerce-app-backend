@@ -155,12 +155,10 @@ route.put(
   body("name").isString(),
   body("category").isString(),
   body("price")
-    .toInt()
     .isNumeric()
     .isLength({ min: 1, max: 6 })
     .custom((value) => value >= 0),
   body("stock")
-    .toInt()
     .isNumeric()
     .isLength({ min: 1, max: 3 })
     .custom((value) => value >= 0),
