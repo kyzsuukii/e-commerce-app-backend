@@ -4,7 +4,7 @@ import multer from "multer";
 import * as path from "path";
 import { conn } from "../../lib/db";
 import { body, validationResult } from "express-validator";
-import { findChangedValues } from "../../lib/utils.ts";
+import { findChangedValues, isAdmin } from "../../lib/utils.ts";
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = [
@@ -44,13 +44,8 @@ const upload = multer({
 route.get(
   "/all",
   passport.authenticate("jwt", { session: false }),
+  isAdmin,
   async (req: any, res) => {
-    if (req.user?.role !== "ADMIN") {
-      return res.status(403).json({
-        errors: [{ msg: "You do not have administrative privileges" }],
-      });
-    }
-
     const { limit: queryLimit } = req.query;
 
     const db = await conn();
@@ -82,13 +77,8 @@ route.get(
 route.get(
   "/get/:id",
   passport.authenticate("jwt", { session: false }),
+  isAdmin,
   async (req: any, res) => {
-    if (req.user?.role !== "ADMIN") {
-      return res.status(403).json({
-        errors: [{ msg: "You do not have administrative privileges" }],
-      });
-    }
-
     const { id } = req.params;
 
     const db = await conn();
@@ -115,12 +105,8 @@ route.get(
 route.get(
   "/category/:categoryName",
   passport.authenticate("jwt", { session: false }),
+  isAdmin,
   async (req: any, res) => {
-    if (req.user?.role !== "ADMIN") {
-      return res.status(403).json({
-        errors: [{ msg: "You do not have administrative privileges" }],
-      });
-    }
 
     const db = await conn();
 
@@ -151,6 +137,7 @@ route.get(
 route.put(
   "/update",
   passport.authenticate("jwt", { session: false }),
+  isAdmin,
   body("id").isInt(),
   body("name").isString(),
   body("category").isString(),
@@ -164,12 +151,6 @@ route.put(
     .custom((value) => value >= 0),
   body("description").isString(),
   async (req: any, res) => {
-    if (req.user?.role !== "ADMIN") {
-      return res.status(403).json({
-        errors: [{ msg: "You do not have administrative privileges" }],
-      });
-    }
-
     const result = validationResult(req);
     if (!result.isEmpty()) {
       return res.status(400).json({ errors: result.array() });
@@ -256,15 +237,11 @@ route.put(
 route.delete(
   "/delete",
   passport.authenticate("jwt", { session: false }),
-
+  isAdmin,
   body("id").isInt().notEmpty(),
   async (req: any, res) => {
-    if (req.user?.role !== "ADMIN") {
-      return res.status(403).json({
-        errors: [{ msg: "You do not have administrative privileges" }],
-      });
-    }
     const { id } = req.body;
+    
     const db = await conn();
 
     try {
@@ -320,6 +297,7 @@ route.delete(
 route.post(
   "/upload",
   passport.authenticate("jwt", { session: false }),
+  isAdmin,
   upload.single("thumbnail"),
   body("name").isString(),
   body("category").isString(),
@@ -335,11 +313,6 @@ route.post(
     .custom((value) => value >= 0),
   body("description").isString(),
   async (req: any, res) => {
-    if (req.user?.role !== "ADMIN") {
-      return res.status(403).json({
-        errors: [{ msg: "You do not have administrative privileges" }],
-      });
-    }
     const result = validationResult(req);
     if (!result.isEmpty()) {
       return res.status(400).json({ errors: result.array() });
