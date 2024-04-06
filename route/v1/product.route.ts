@@ -4,6 +4,7 @@ import multer from "multer";
 import * as path from "path";
 import { conn } from "../../lib/db";
 import { body, validationResult } from "express-validator";
+import { findChangedValues } from "../../lib/utils.ts";
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = [
@@ -55,7 +56,7 @@ route.get(
       const db = await conn();
 
       let query =
-        "SELECT p.id, p.name, p.description, p.price, p.stock, p.thumbnail, GROUP_CONCAT(c.name SEPARATOR ', ') AS category_names FROM products p LEFT JOIN product_category pc ON p.id = pc.product_id LEFT JOIN category c ON pc.category_id = c.id GROUP BY p.id";
+        "SELECT p.id, p.name, p.description, p.price, p.stock, p.thumbnail, GROUP_CONCAT(c.name SEPARATOR ', ') AS category FROM products p LEFT JOIN product_category pc ON p.id = pc.product_id LEFT JOIN category c ON pc.category_id = c.id GROUP BY p.id";
 
       const params = [];
 
@@ -138,9 +139,117 @@ route.get(
   },
 );
 
+route.put(
+  "/update",
+  passport.authenticate("jwt", { session: false }),
+  body("id").isInt(),
+  body("name").isString(),
+  body("category").isString(),
+  body("price")
+    .toInt()
+    .isNumeric()
+    .isLength({ min: 1, max: 6 })
+    .custom((value) => value >= 0),
+  body("stock")
+    .toInt()
+    .isNumeric()
+    .isLength({ min: 1, max: 3 })
+    .custom((value) => value >= 0),
+  body("description").isString(),
+  async (req: any, res) => {
+    if (req.user?.role !== "ADMIN") {
+      return res.status(403).json({
+        errors: [{ msg: "You do not have administrative privileges" }],
+      });
+    }
+
+    const result = validationResult(req);
+    if (!result.isEmpty()) {
+      return res.status(400).json({ errors: result.array() });
+    }
+
+    const db = await conn();
+
+    try {
+      await db.beginTransaction();
+
+      const { id, category, ...updatedFields } = req.body;
+
+      const [product]: any = await db.execute(
+        "SELECT p.id, p.name, p.description, p.price, p.stock, p.thumbnail, (SELECT GROUP_CONCAT(c.name SEPARATOR ', ') FROM product_category pc JOIN category c ON pc.category_id = c.id WHERE pc.product_id = p.id) AS category_names FROM products p WHERE p.id = ? FOR UPDATE",
+        [id],
+      );
+
+      if (!product[0]) {
+        return res.status(404).json({ errors: [{ msg: "Product not found" }] });
+      }
+
+      const changedValues = findChangedValues(product[0], updatedFields);
+
+      if (category) {
+        await db.execute("DELETE FROM product_category WHERE product_id = ?", [
+          id,
+        ]);
+
+        const categoryIds: number[] = await Promise.all(
+          category.split(",").map(async (catName: string) => {
+            const [categoryResult]: any = await db.execute(
+              "SELECT id FROM category WHERE name = ? FOR UPDATE",
+              [catName],
+            );
+            if (categoryResult && categoryResult.length > 0) {
+              return categoryResult[0].id;
+            } else {
+              const [insertResult]: any = await db.execute(
+                "INSERT INTO category (name) VALUES (?)",
+                [catName],
+              );
+              return insertResult.insertId;
+            }
+          }),
+        );
+
+        await Promise.all(
+          categoryIds.map((categoryId: number) => {
+            return db.execute(
+              "INSERT INTO product_category (product_id, category_id) VALUES (?, ?)",
+              [id, categoryId],
+            );
+          }),
+        );
+      }
+
+      if (Object.keys(changedValues).length > 0) {
+        const setClause = Object.keys(changedValues)
+          .map((key) => `${key} = ?`)
+          .join(", ");
+        const values = Object.values(changedValues);
+        values.push(id);
+
+        await db.execute(
+          `UPDATE products
+                     SET ${setClause}
+                     WHERE id = ?`,
+          values,
+        );
+      }
+
+      await db.commit();
+      res.status(200).json({ msg: "Product updated successfully" });
+    } catch (error) {
+      await db.rollback();
+      console.error("Error updating product:", error);
+      res.status(500).json({ errors: [{ msg: "Internal Server Error" }] });
+    } finally {
+      await db.end();
+    }
+  },
+);
+
 route.delete(
   "/delete",
   passport.authenticate("jwt", { session: false }),
+
   body("id").isInt().notEmpty(),
   async (req: any, res) => {
     if (req.user?.role !== "ADMIN") {
