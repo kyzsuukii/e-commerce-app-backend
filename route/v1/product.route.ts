@@ -45,16 +45,17 @@ route.get(
   "/all",
   passport.authenticate("jwt", { session: false }),
   async (req: any, res) => {
+    if (req.user?.role !== "ADMIN") {
+      return res.status(403).json({
+        errors: [{ msg: "You do not have administrative privileges" }],
+      });
+    }
+
+    const { limit: queryLimit } = req.query;
+
+    const db = await conn();
+
     try {
-      if (req.user?.role !== "ADMIN") {
-        return res.status(403).json({
-          errors: [{ msg: "You do not have administrative privileges" }],
-        });
-      }
-
-      const { limit: queryLimit } = req.query;
-      const db = await conn();
-
       let query =
         "SELECT p.id, p.name, p.description, p.price, p.stock, p.thumbnail, GROUP_CONCAT(c.name SEPARATOR ', ') AS category FROM products p LEFT JOIN product_category pc ON p.id = pc.product_id LEFT JOIN category c ON pc.category_id = c.id GROUP BY p.id";
 
@@ -72,6 +73,8 @@ route.get(
     } catch (error) {
       console.error("Error fetching products:", error);
       res.status(500).json({ errors: [{ msg: "Error fetching products" }] });
+    } finally {
+      await db.end();
     }
   },
 );
@@ -80,16 +83,17 @@ route.get(
   "/get/:id",
   passport.authenticate("jwt", { session: false }),
   async (req: any, res) => {
+    if (req.user?.role !== "ADMIN") {
+      return res.status(403).json({
+        errors: [{ msg: "You do not have administrative privileges" }],
+      });
+    }
+
+    const { id } = req.params;
+
+    const db = await conn();
+
     try {
-      if (req.user?.role !== "ADMIN") {
-        return res.status(403).json({
-          errors: [{ msg: "You do not have administrative privileges" }],
-        });
-      }
-
-      const { id } = req.params;
-      const db = await conn();
-
       const [product]: any = await db.execute(
         "SELECT p.id, p.name, p.description, p.price, p.stock, p.thumbnail, (SELECT GROUP_CONCAT(c.name SEPARATOR ', ') FROM product_category pc JOIN category c ON pc.category_id = c.id WHERE pc.product_id = p.id) AS category_names FROM products p WHERE p.id = ?",
         [id],
@@ -103,6 +107,8 @@ route.get(
     } catch (error) {
       console.error("Error fetching product:", error);
       res.status(500).json({ errors: [{ msg: "Error fetching product" }] });
+    } finally {
+      await db.end();
     }
   },
 );
@@ -110,15 +116,16 @@ route.get(
   "/category/:categoryName",
   passport.authenticate("jwt", { session: false }),
   async (req: any, res) => {
-    try {
-      if (req.user?.role !== "ADMIN") {
-        return res.status(403).json({
-          errors: [{ msg: "You do not have administrative privileges" }],
-        });
-      }
+    if (req.user?.role !== "ADMIN") {
+      return res.status(403).json({
+        errors: [{ msg: "You do not have administrative privileges" }],
+      });
+    }
 
+    const db = await conn();
+
+    try {
       const { categoryName } = req.params;
-      const db = await conn();
 
       const [products]: any = await db.execute(
         "SELECT p.id, p.name, p.description, p.price, p.stock, p.thumbnail, c.name AS category_name FROM products p JOIN product_category pc ON p.id = pc.product_id JOIN category c ON pc.category_id = c.id WHERE c.name = ?;",
@@ -135,6 +142,8 @@ route.get(
     } catch (error) {
       console.error("Error fetching products:", error);
       res.status(500).json({ errors: [{ msg: "Error fetching products" }] });
+    } finally {
+      await db.end();
     }
   },
 );
@@ -304,6 +313,8 @@ route.delete(
       return res
         .status(500)
         .json({ errors: [{ msg: "Internal server error" }] });
+    } finally {
+      await db.end();
     }
   },
 );
@@ -376,6 +387,8 @@ route.post(
       return res
         .status(500)
         .json({ errors: [{ msg: "Error saving product" }] });
+    } finally {
+      await db.end();
     }
   },
 );
