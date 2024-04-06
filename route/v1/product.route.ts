@@ -185,7 +185,7 @@ route.put(
       const { id, category, ...updatedFields } = req.body;
 
       const [product]: any = await db.execute(
-        "SELECT p.id, p.name, p.description, p.price, p.stock, p.thumbnail, (SELECT GROUP_CONCAT(c.name SEPARATOR ', ') FROM product_category pc JOIN category c ON pc.category_id = c.id WHERE pc.product_id = p.id) AS category_names FROM products p WHERE p.id = ? FOR UPDATE",
+        "SELECT p.id, p.name, p.description, p.price, p.stock, (SELECT GROUP_CONCAT(c.name SEPARATOR ', ') FROM product_category pc JOIN category c ON pc.category_id = c.id WHERE pc.product_id = p.id) AS category_names FROM products p WHERE p.id = ? FOR UPDATE",
         [id],
       );
 
