@@ -4,8 +4,25 @@ import passport from "passport";
 import bcrypt from "bcrypt";
 import { conn } from "../../lib/db";
 import { reCaptcha } from "../../lib/reCaptha";
+import { isAdmin } from "../../lib/utils";
 
 const router = express.Router();
+
+router.get("/all", passport.authenticate("jwt", { session: false }), isAdmin, async (req, res) => {
+  
+  const db = await conn();
+
+  try {
+    const [users]: any = await db.query('SELECT id, email, role FROM auth');
+    
+    return res.status(200).json({ users });
+  } catch (error) {
+    console.error("Error updating product:", error);
+      return res.status(500).json({ errors: [{ msg: "Internal Server Error" }] });
+  } finally {
+    await db.end();
+  }
+})
 
 router.get(
   "/me",
