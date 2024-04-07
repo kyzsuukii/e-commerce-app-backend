@@ -23,16 +23,17 @@ router.put(
   body("oldPassword").isString().isLength({ min: 8 }),
   body("newPassword").isString().isLength({ min: 8 }),
   async (req: any, res) => {
+    const { oldPassword, newPassword } = req.body;
+    const { id: userId } = req.user;
+    
+    const result = validationResult(req);
+    if (!result.isEmpty()) {
+      return res.status(400).json({ errors: result.array() });
+    }
+    
+    const db = await conn();
+    
     try {
-      const { oldPassword, newPassword } = req.body;
-      const { id: userId } = req.user;
-
-      const result = validationResult(req);
-      if (!result.isEmpty()) {
-        return res.status(400).json({ errors: result.array() });
-      }
-
-      const db = await conn();
       const [rows]: any = await db.execute(
         "SELECT password FROM auth WHERE id = ? LIMIT 1",
         [userId],
@@ -58,8 +59,11 @@ router.put(
       ]);
 
       res.json({ msg: "Password updated successfully" });
-    } catch (e) {
-      throw e;
+    } catch (error) {
+      console.error("Error updating product:", error);
+      return res.status(500).json({ errors: [{ msg: "Internal Server Error" }] });
+    } finally {
+      await db.end();
     }
   },
 );
