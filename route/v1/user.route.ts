@@ -29,7 +29,7 @@ router.get(
   passport.authenticate("jwt", { session: false }),
   (req: any, res) => {
     const { id, email, role } = req.user;
-    res.json({ id, email, role });
+    return res.json({ id, email, role });
   },
 );
 
@@ -75,7 +75,7 @@ router.put(
         userId,
       ]);
 
-      res.json({ msg: "Password updated successfully" });
+      return res.json({ msg: "Password updated successfully" });
     } catch (error) {
       console.error("Error updating product:", error);
       return res.status(500).json({ errors: [{ msg: "Internal Server Error" }] });
