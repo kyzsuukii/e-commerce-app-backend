@@ -13,9 +13,26 @@ router.get("/all", passport.authenticate("jwt", { session: false }), isAdmin, as
   const db = await conn();
 
   try {
-    const [users]: any = await db.query('SELECT id, email, role FROM auth');
-    
+    const [users]: any = await db.query('SELECT id, email, role FROM auth WHERE id != ?', [req.user?.id]);
     return res.status(200).json({ users });
+  } catch (error) {
+    console.error("Error updating product:", error);
+      return res.status(500).json({ errors: [{ msg: "Internal Server Error" }] });
+  } finally {
+    await db.end();
+  }
+})
+
+router.delete('/delete', passport.authenticate('jwt', { session: false }), isAdmin, body('id').isInt().notEmpty(), async (req, res) => {
+
+  const db = await conn();
+
+  try {
+    const { id } = req.body;
+
+    await db.query('DELETE FROM auth WHERE id = ?', [id]);
+
+    return res.status(200).json({ msg: 'User deleted successfully' });
   } catch (error) {
     console.error("Error updating product:", error);
       return res.status(500).json({ errors: [{ msg: "Internal Server Error" }] });
