@@ -23,6 +23,37 @@ router.get("/all", passport.authenticate("jwt", { session: false }), isAdmin, as
   }
 })
 
+router.patch(
+  "/role",
+  passport.authenticate("jwt", { session: false }),
+  isAdmin,
+  body("id").isInt().notEmpty(),
+  body("role").isString().isIn(["CUSTOMER", "ADMIN"]).notEmpty(),
+  async (req, res) => {
+    const db = await conn();
+
+    try {
+      const { id, role } = req.body;
+
+      const [result]: any = await db.query("UPDATE auth SET role = ? WHERE id = ?", [role, id]);
+      
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ errors: [{ msg: "User not found" }] });
+      }
+
+      return res.status(200).json({ msg: 'User updated successfully' });
+
+    } catch (error) {
+      console.error("Error updating product:", error);
+      return res
+        .status(500)
+        .json({ errors: [{ msg: "Internal Server Error" }] });
+    } finally {
+      await db.end();
+    }
+  }
+);
+
 router.delete('/delete', passport.authenticate('jwt', { session: false }), isAdmin, body('id').isInt().notEmpty(), async (req, res) => {
 
   const db = await conn();
@@ -30,7 +61,11 @@ router.delete('/delete', passport.authenticate('jwt', { session: false }), isAdm
   try {
     const { id } = req.body;
 
-    await db.query('DELETE FROM auth WHERE id = ?', [id]);
+    const [result]: any = await db.query('DELETE FROM auth WHERE id = ?', [id]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ errors: [{ msg: "User not found" }] });
+    }
 
     return res.status(200).json({ msg: 'User deleted successfully' });
   } catch (error) {
