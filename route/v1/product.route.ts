@@ -63,10 +63,10 @@ route.get(
 
       const [products]: any = await db.execute(query, params);
 
-      res.json(products);
+      return res.status(200).json(products);
     } catch (error) {
       console.error("Error fetching products:", error);
-      res.status(500).json({ errors: [{ msg: "Error fetching products" }] });
+      return res.status(500).json({ errors: [{ msg: "Error fetching products" }] });
     } finally {
       await db.end();
     }
@@ -97,10 +97,10 @@ route.get(
         return res.status(404).json({ errors: [{ msg: "Product not found" }] });
       }
 
-      res.json(product[0]);
+      return res.status(200).json(product[0]);
     } catch (error) {
       console.error("Error fetching product:", error);
-      res.status(500).json({ errors: [{ msg: "Error fetching product" }] });
+      return res.status(500).json({ errors: [{ msg: "Error fetching product" }] });
     } finally {
       await db.end();
     }
@@ -132,10 +132,10 @@ route.get(
           .json({ errors: [{ msg: "No products found for the category" }] });
       }
 
-      res.json(products);
+      return res.status(200).json(products);
     } catch (error) {
       console.error("Error fetching products:", error);
-      res.status(500).json({ errors: [{ msg: "Error fetching products" }] });
+      return res.status(500).json({ errors: [{ msg: "Error fetching products" }] });
     } finally {
       await db.end();
     }
