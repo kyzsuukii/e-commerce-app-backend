@@ -44,7 +44,6 @@ const upload = multer({
 route.get(
   "/all",
   passport.authenticate("jwt", { session: false }),
-  isAdmin,
   async (req: any, res) => {
     const { limit: queryLimit } = req.query;
 
@@ -77,7 +76,6 @@ route.get(
 route.get(
   "/get/:id",
   passport.authenticate("jwt", { session: false }),
-  isAdmin,
   async (req: any, res) => {
     const { id } = req.params;
 
@@ -105,7 +103,6 @@ route.get(
 route.get(
   "/category/:categoryName",
   passport.authenticate("jwt", { session: false }),
-  isAdmin,
   async (req: any, res) => {
 
     const db = await conn();
