@@ -3,7 +3,7 @@ import passport from "passport";
 import multer from "multer";
 import * as path from "path";
 import { conn } from "../../lib/db";
-import { body, validationResult } from "express-validator";
+import { body, param, query, validationResult } from "express-validator";
 import { findChangedValues, isAdmin } from "../../lib/utils.ts";
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
@@ -76,7 +76,13 @@ route.get(
 route.get(
   "/get/:id",
   passport.authenticate("jwt", { session: false }),
+  param("id").isInt().notEmpty(),
   async (req: any, res) => {
+    const result = validationResult(req);
+    if (!result.isEmpty()) {
+      return res.status(400).json({ errors: result.array() });
+    }
+
     const { id } = req.params;
 
     const db = await conn();
@@ -103,7 +109,12 @@ route.get(
 route.get(
   "/category/:categoryName",
   passport.authenticate("jwt", { session: false }),
+  param("categoryName").isString().notEmpty(),
   async (req: any, res) => {
+    const result = validationResult(req);
+    if (!result.isEmpty()) {
+      return res.status(400).json({ errors: result.array() });
+    }
 
     const db = await conn();
 
@@ -237,6 +248,11 @@ route.delete(
   isAdmin,
   body("id").isInt().notEmpty(),
   async (req: any, res) => {
+    const result = validationResult(req);
+    if (!result.isEmpty()) {
+      return res.status(400).json({ errors: result.array() });
+    }
+
     const { id } = req.body;
     
     const db = await conn();
