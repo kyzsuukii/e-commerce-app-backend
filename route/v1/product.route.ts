@@ -73,6 +73,35 @@ route.get(
   },
 );
 
+route.get("/search", passport.authenticate("jwt", { session: false }), query("q").isString().notEmpty(), async (req: any, res) => {
+  const result = validationResult(req);
+  if (!result.isEmpty()) {
+    return res.status(400).json({ errors: result.array() });
+  }
+  
+  const { q: query } = req.query;
+
+  const db = await conn();
+
+    try {
+      const [products]: any = await db.execute(
+        "SELECT p.id, p.name, p.description, p.price, p.stock, p.thumbnail, (SELECT GROUP_CONCAT(c.name SEPARATOR ', ') FROM product_category pc JOIN category c ON pc.category_id = c.id WHERE pc.product_id = p.id) AS category FROM products p WHERE p.name LIKE ?",
+        [`%${query}%`]
+      );
+
+      if (!products[0]) {
+        return res.status(404).json({ errors: [{ msg: "Product not found" }] });
+      }
+
+      return res.status(200).json(products);
+    } catch (error) {
+      console.error("Error fetching product:", error);
+      return res.status(500).json({ errors: [{ msg: "Error fetching product" }] });
+    } finally {
+      await db.end();
+    }
+})
+
 route.get(
   "/get/:id",
   passport.authenticate("jwt", { session: false }),
