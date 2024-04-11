@@ -128,6 +128,37 @@ route.put(
 );
 
 route.delete(
+  "/delete",
+  passport.authenticate("jwt", { session: false }),
+  isAdmin,
+  async (req, res) => {
+    const { orderId } = req.body;
+    const db = await conn();
+
+    try {
+      const [order]: any = await db.execute(
+        "SELECT id FROM orders WHERE id = ?",
+        [orderId]
+      );
+
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+
+      await db.execute("DELETE FROM orders WHERE id = ?", [orderId]);
+
+      return res.status(200).json({ message: "Order deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting order:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    } finally {
+      await db.end();
+    }
+  }
+);
+
+
+route.delete(
   "/item/delete",
   passport.authenticate("jwt", { session: false }),
   isAdmin,
