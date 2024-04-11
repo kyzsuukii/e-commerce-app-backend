@@ -2,6 +2,7 @@ import express from "express";
 import { body, validationResult } from "express-validator";
 import passport from "passport";
 import { conn } from "../../lib/db";
+import { isAdmin } from "../../lib/utils";
 
 const route = express.Router();
 
@@ -58,6 +59,37 @@ route.post(
       await db.rollback();
       console.error("Error creating order:", error);
       res.status(500).json({ error: "Internal server error" });
+    } finally {
+      await db.end();
+    }
+  }
+);
+
+route.get(
+  "/all",
+  passport.authenticate("jwt", { session: false }),
+  isAdmin,
+  async (req, res) => {
+    
+    const db = await conn();
+    try {
+      const [orders]: any = await db.execute(
+        "SELECT o.id, o.total_amount, o.address, o.order_date, o.order_status, oi.quantity, oi.price, p.name AS product_name, p.description AS product_description FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN products p ON oi.product_id = p.id ORDER BY o.order_date DESC"
+      );
+
+      const groupedOrders = orders.reduce((acc: any[], order: any) => {
+        const { id, total_amount, address, order_date, ...item } = order;
+        if (!acc[id]) {
+          acc[id] = { id, total_amount, address, order_date, items: [] };
+        }
+        acc[id].items.push(item);
+        return acc;
+      }, {});
+
+      return res.status(200).json(Object.values(groupedOrders));
+    } catch (error) {
+      console.error("Error getting orders:", error);
+      return res.status(500).json({ error: "Internal server error" });
     } finally {
       await db.end();
     }
