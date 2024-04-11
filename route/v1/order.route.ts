@@ -136,19 +136,16 @@ route.delete(
     const db = await conn();
 
     try {
-      const [order]: any = await db.execute(
-        "SELECT id FROM orders WHERE id = ?",
-        [orderId]
-      );
+      await db.beginTransaction();
 
-      if (!order) {
-        return res.status(404).json({ error: "Order not found" });
-      }
-
+      await db.execute("DELETE FROM order_items WHERE order_id = ?", [orderId]);
       await db.execute("DELETE FROM orders WHERE id = ?", [orderId]);
+
+      await db.commit();
 
       return res.status(200).json({ message: "Order deleted successfully" });
     } catch (error) {
+      await db.rollback();
       console.error("Error deleting order:", error);
       return res.status(500).json({ error: "Internal server error" });
     } finally {
@@ -156,7 +153,6 @@ route.delete(
     }
   }
 );
-
 
 route.delete(
   "/item/delete",
@@ -168,16 +164,23 @@ route.delete(
     const db = await conn();
 
     try {
-      const [result]: any = await db.execute(
-        "SELECT * FROM order_items WHERE id = ?",
+      const [item]: any = await db.execute(
+        "SELECT price, quantity FROM order_items WHERE id = ?",
         [itemId]
       );
 
-      if (!result.length) {
+      if (!item) {
         return res.status(404).json({ error: "Order item not found" });
       }
 
+      const { price, quantity } = item;
+
       await db.execute("DELETE FROM order_items WHERE id = ?", [itemId]);
+
+      await db.execute(
+        "UPDATE orders SET total_amount = total_amount - ? WHERE id = (SELECT order_id FROM order_items WHERE id = ?)",
+        [price * quantity, itemId]
+      );
 
       return res
         .status(200)
