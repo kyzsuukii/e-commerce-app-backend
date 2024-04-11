@@ -70,7 +70,7 @@ route.get(
   passport.authenticate("jwt", { session: false }),
   isAdmin,
   async (req, res) => {
-    
+
     const db = await conn();
     try {
       const [orders]: any = await db.execute(
@@ -95,6 +95,37 @@ route.get(
     }
   }
 );
+
+route.put(
+  "/status/:orderId",
+  passport.authenticate("jwt", { session: false }),
+  isAdmin,
+  async (req, res) => {
+    const { orderId } = req.params;
+    const { status } = req.body;
+
+    const db = await conn();
+
+    try {
+      const [result]: any = await db.execute(
+        "UPDATE orders SET order_status = ? WHERE id = ?",
+        [status, orderId]
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+
+      return res.status(200).json({ message: "Order status updated successfully" });
+    } catch (error) {
+      console.error("Error updating order status:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    } finally {
+      await db.end();
+    }
+  }
+);
+
 
 route.get(
   "/get",
