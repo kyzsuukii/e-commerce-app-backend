@@ -21,6 +21,8 @@ CREATE TABLE orders
      order_date   TIMESTAMP DEFAULT CURRENT_TIMESTAMP NULL,
      total_amount DECIMAL(10, 2) NOT NULL,
      address      VARCHAR(255) NOT NULL,
+     order_status ENUM ('PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED') DEFAULT
+     'PENDING' NOT NULL,
      CONSTRAINT orders_ibfk_1 FOREIGN KEY (customer_id) REFERENCES auth (id)
   );
 
