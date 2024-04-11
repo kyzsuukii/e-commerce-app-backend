@@ -70,11 +70,10 @@ route.get(
   passport.authenticate("jwt", { session: false }),
   isAdmin,
   async (req, res) => {
-
     const db = await conn();
     try {
       const [orders]: any = await db.execute(
-        "SELECT o.id, o.total_amount, o.address, o.order_date, o.order_status, oi.quantity, oi.price, p.name AS product_name, p.description AS product_description FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN products p ON oi.product_id = p.id ORDER BY o.order_date DESC"
+        "SELECT o.id, o.total_amount, o.address, o.order_date, o.order_status, oi.id AS order_item_id, oi.quantity, oi.price, p.name AS product_name, p.description AS product_description FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN products p ON oi.product_id = p.id ORDER BY o.order_date DESC"
       );
 
       const groupedOrders = orders.reduce((acc: any[], order: any) => {
@@ -116,7 +115,9 @@ route.put(
         return res.status(404).json({ error: "Order not found" });
       }
 
-      return res.status(200).json({ message: "Order status updated successfully" });
+      return res
+        .status(200)
+        .json({ message: "Order status updated successfully" });
     } catch (error) {
       console.error("Error updating order status:", error);
       return res.status(500).json({ error: "Internal server error" });
@@ -126,6 +127,38 @@ route.put(
   }
 );
 
+route.delete(
+  "/item/delete",
+  passport.authenticate("jwt", { session: false }),
+  isAdmin,
+  async (req, res) => {
+    const { orderItemId: itemId } = req.body;
+
+    const db = await conn();
+
+    try {
+      const [result]: any = await db.execute(
+        "SELECT * FROM order_items WHERE id = ?",
+        [itemId]
+      );
+
+      if (!result.length) {
+        return res.status(404).json({ error: "Order item not found" });
+      }
+
+      await db.execute("DELETE FROM order_items WHERE id = ?", [itemId]);
+
+      return res
+        .status(200)
+        .json({ message: "Order item deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting order item:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    } finally {
+      await db.end();
+    }
+  }
+);
 
 route.get(
   "/get",
@@ -137,7 +170,7 @@ route.get(
 
     try {
       const [orders]: any = await db.execute(
-        "SELECT o.id, o.total_amount, o.address, o.order_date, o.order_status, oi.quantity, oi.price, p.name AS product_name, p.description AS product_description FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN products p ON oi.product_id = p.id WHERE o.customer_id = ? ORDER BY o.order_date DESC",
+        "SELECT o.id, o.total_amount, o.address, o.order_date, o.order_status, oi.id AS order_item_id, oi.quantity, oi.price, p.name AS product_name, p.description AS product_description FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN products p ON oi.product_id = p.id WHERE o.customer_id = ? ORDER BY o.order_date DESC",
         [userId]
       );
 
