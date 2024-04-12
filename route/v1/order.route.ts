@@ -203,6 +203,15 @@ route.get(
     const db = await conn();
 
     try {
+      const [existingOrders]: any = await db.execute(
+        "SELECT id FROM orders WHERE customer_id = ? LIMIT 1",
+        [userId]
+      );
+
+      if (!existingOrders.length) {
+        return res.status(200).json([]);
+      }
+
       const [orders]: any = await db.execute(
         "SELECT o.id, o.total_amount, o.address, o.order_date, o.order_status, oi.id AS order_item_id, oi.quantity, oi.price, p.name AS product_name, p.description AS product_description FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN products p ON oi.product_id = p.id WHERE o.customer_id = ? ORDER BY o.order_date DESC",
         [userId]
@@ -226,5 +235,6 @@ route.get(
     }
   }
 );
+
 
 export default route;
