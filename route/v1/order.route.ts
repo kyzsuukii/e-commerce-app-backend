@@ -164,28 +164,34 @@ route.delete(
     const db = await conn();
 
     try {
+      await db.beginTransaction();
+
       const [item]: any = await db.execute(
-        "SELECT price, quantity FROM order_items WHERE id = ?",
+        "SELECT order_id, price, quantity FROM order_items WHERE id = ?",
         [itemId]
       );
 
-      if (!item) {
+      if (!item || item.length === 0) {
+        await db.rollback();
         return res.status(404).json({ error: "Order item not found" });
       }
 
-      const { price, quantity } = item;
+      const { order_id: orderId, price, quantity } = item[0];
 
       await db.execute("DELETE FROM order_items WHERE id = ?", [itemId]);
 
       await db.execute(
-        "UPDATE orders SET total_amount = total_amount - ? WHERE id = (SELECT order_id FROM order_items WHERE id = ?)",
-        [price * quantity, itemId]
+        "UPDATE orders SET total_amount = total_amount - ? WHERE id = ?",
+        [price * quantity, orderId]
       );
+
+      await db.commit();
 
       return res
         .status(200)
         .json({ message: "Order item deleted successfully" });
     } catch (error) {
+      await db.rollback();
       console.error("Error deleting order item:", error);
       return res.status(500).json({ error: "Internal server error" });
     } finally {
@@ -235,6 +241,5 @@ route.get(
     }
   }
 );
-
 
 export default route;
