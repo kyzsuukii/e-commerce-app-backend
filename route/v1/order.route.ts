@@ -73,13 +73,13 @@ route.get(
     const db = await conn();
     try {
       const [orders]: any = await db.execute(
-        "SELECT o.id, o.total_amount, o.address, o.order_date, o.order_status, oi.id AS order_item_id, oi.quantity, oi.price, p.name AS product_name, p.description AS product_description FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN products p ON oi.product_id = p.id ORDER BY o.order_date DESC"
+        "SELECT o.id, a.email, o.total_amount, o.address, o.order_date, o.order_status, oi.id AS order_item_id, oi.quantity, oi.price, p.name AS product_name, p.description AS product_description FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN products p ON oi.product_id = p.id JOIN auth a ON o.customer_id = a.id ORDER BY o.order_date DESC"
       );
 
       const groupedOrders = orders.reduce((acc: any[], order: any) => {
-        const { id, total_amount, address, order_date, order_status, ...item } = order;
+        const { id, email, total_amount, address, order_date, order_status, ...item } = order;
         if (!acc[id]) {
-          acc[id] = { id, total_amount, address, order_date, order_status, items: [] };
+          acc[id] = { id, email, total_amount, address, order_date, order_status, items: [] };
         }
         acc[id].items.push(item);
         return acc;
