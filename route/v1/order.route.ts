@@ -133,7 +133,7 @@ route.put(
 
       return res
         .status(200)
-        .json({ message: "Order status updated successfully" });
+        .json({ msg: "Order status updated successfully" });
     } catch (error) {
       console.error("Error updating order status:", error);
       return res.status(500).json({ error: "Internal server error" });
@@ -159,7 +159,7 @@ route.delete(
 
       await db.commit();
 
-      return res.status(200).json({ message: "Order deleted successfully" });
+      return res.status(200).json({ msg: "Order deleted successfully" });
     } catch (error) {
       await db.rollback();
       console.error("Error deleting order:", error);
@@ -205,7 +205,7 @@ route.delete(
 
       return res
         .status(200)
-        .json({ message: "Order item deleted successfully" });
+        .json({ msg: "Order item deleted successfully" });
     } catch (error) {
       await db.rollback();
       console.error("Error deleting order item:", error);
