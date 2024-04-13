@@ -96,16 +96,32 @@ route.get(
 );
 
 route.put(
-  "/status/:orderId",
+  "/status",
   passport.authenticate("jwt", { session: false }),
   isAdmin,
   async (req, res) => {
-    const { orderId } = req.params;
-    const { status } = req.body;
+    const { orderStatus: status, orderId } = req.body;
 
     const db = await conn();
 
     try {
+      const [order]: any = await db.execute(
+        "SELECT order_status FROM orders WHERE id = ? LIMIT 1",
+        [orderId]
+      );
+
+      if (!order || order.length === 0) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+
+      const currentStatus = order[0].order_status;
+
+      if (currentStatus === status) {
+        return res
+          .status(400)
+          .json({ error: "Status is already set to the provided value" });
+      }
+
       const [result]: any = await db.execute(
         "UPDATE orders SET order_status = ? WHERE id = ?",
         [status, orderId]
