@@ -77,9 +77,9 @@ route.get(
       );
 
       const groupedOrders = orders.reduce((acc: any[], order: any) => {
-        const { id, total_amount, address, order_date, ...item } = order;
+        const { id, total_amount, address, order_date, order_status, ...item } = order;
         if (!acc[id]) {
-          acc[id] = { id, total_amount, address, order_date, items: [] };
+          acc[id] = { id, total_amount, address, order_date, order_status, items: [] };
         }
         acc[id].items.push(item);
         return acc;
@@ -224,9 +224,9 @@ route.get(
       );
 
       const groupedOrders = orders.reduce((acc: any[], order: any) => {
-        const { id, total_amount, address, order_date, ...item } = order;
+        const { id, total_amount, address, order_date, order_status, ...item } = order;
         if (!acc[id]) {
-          acc[id] = { id, total_amount, address, order_date, items: [] };
+          acc[id] = { id, total_amount, address, order_date, order_status, items: [] };
         }
         acc[id].items.push(item);
         return acc;
