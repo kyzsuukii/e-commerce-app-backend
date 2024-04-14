@@ -1,69 +1,75 @@
-CREATE TABLE auth
-  (
-     id       INT auto_increment PRIMARY KEY,
-     email    VARCHAR(64) NOT NULL,
-     password VARCHAR(255) NOT NULL,
-     role     ENUM ('ADMIN', 'CUSTOMER') DEFAULT 'CUSTOMER' NOT NULL,
-     CONSTRAINT email UNIQUE (email)
-  );
+create table auth (
+  id int auto_increment primary key,
+  email varchar(64) not null,
+  password varchar(255) not null,
+  role enum ('CUSTOMER', 'ADMIN') default 'CUSTOMER' not null,
+  address varchar(255),
+  constraint email unique (email)
+);
 
-CREATE TABLE category
-  (
-     id   BIGINT auto_increment PRIMARY KEY,
-     name VARCHAR(255) NOT NULL,
-     CONSTRAINT category_name_unique UNIQUE (name)
-  );
+create table category (
+  id bigint auto_increment primary key,
+  name varchar(255) not null,
+  constraint name unique (name)
+);
 
-CREATE TABLE orders
-  (
-     id           BIGINT auto_increment PRIMARY KEY,
-     customer_id  INT NOT NULL,
-     order_date   TIMESTAMP DEFAULT CURRENT_TIMESTAMP NULL,
-     total_amount DECIMAL(10, 2) NOT NULL,
-     address      VARCHAR(255) NOT NULL,
-     order_status ENUM ('PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED') DEFAULT
-     'PENDING' NOT NULL,
-     CONSTRAINT orders_ibfk_1 FOREIGN KEY (customer_id) REFERENCES auth (id)
-  );
+create table orders (
+  id bigint auto_increment primary key,
+  customer_id int not null,
+  order_date timestamp default CURRENT_TIMESTAMP null,
+  total_amount decimal(10, 2) not null,
+  order_status enum (
+    'PENDING',
+    'PROCESSING',
+    'SHIPPED',
+    'DELIVERED',
+    'COMPLETED'
+  ) default 'PENDING' not null,
+  constraint orders_ibfk_1 foreign key (customer_id) references auth (id)
+);
 
-CREATE INDEX customer_id ON orders (customer_id);
+create index orders_customer_id_index on orders (customer_id);
 
-CREATE TABLE products
-  (
-     id          BIGINT auto_increment PRIMARY KEY,
-     name        VARCHAR(255) NOT NULL,
-     description TEXT NOT NULL,
-     price       INT NOT NULL,
-     stock       INT NOT NULL,
-     thumbnail   VARCHAR(255) NOT NULL
-  );
+create table price (
+  id bigint unsigned auto_increment primary key,
+  price decimal(10, 2) not null
+);
 
-CREATE TABLE order_items
-  (
-     id         BIGINT auto_increment PRIMARY KEY,
-     order_id   BIGINT NOT NULL,
-     product_id BIGINT NOT NULL,
-     quantity   INT NOT NULL,
-     price      DECIMAL(10, 2) NOT NULL,
-     CONSTRAINT order_items_ibfk_1 FOREIGN KEY (order_id) REFERENCES orders (id)
-     ,
-     CONSTRAINT order_items_ibfk_2 FOREIGN KEY (product_id) REFERENCES products
-     (id)
-  );
+create table products (
+  id bigint auto_increment primary key,
+  name varchar(255) not null,
+  description text not null,
+  price_id bigint unsigned not null,
+  stock int not null,
+  thumbnail varchar(255) not null,
+  constraint products_ibfk_1 foreign key (price_id) references price (id)
+);
 
-CREATE INDEX order_id ON order_items (order_id);
+create table order_items (
+  id bigint auto_increment primary key,
+  order_id bigint not null,
+  product_id bigint not null,
+  quantity int not null,
+  price_id bigint unsigned not null,
+  constraint order_items_ibfk_1 foreign key (order_id) references orders (id),
+  constraint order_items_ibfk_2 foreign key (product_id) references products (id),
+  constraint order_items_ibfk_3 foreign key (price_id) references price (id)
+);
+sql formatter
+create index order_items_order_id_index on order_items (order_id);
 
-CREATE INDEX product_id ON order_items (product_id);
+create index order_items_product_id_index on order_items (product_id);
 
-CREATE TABLE product_category
-  (
-     product_id  BIGINT NOT NULL,
-     category_id BIGINT NOT NULL,
-     PRIMARY KEY (product_id, category_id),
-     CONSTRAINT product_category_ibfk_1 FOREIGN KEY (product_id) REFERENCES
-     products (id),
-     CONSTRAINT product_category_ibfk_2 FOREIGN KEY (category_id) REFERENCES
-     category (id)
-  );
+create index price_id on order_items (price_id);
 
-CREATE INDEX idx_category_id ON product_category (category_id); 
+create table product_category (
+  product_id bigint not null,
+  category_id bigint not null,
+  primary key (product_id, category_id),
+  constraint product_category_ibfk_1 foreign key (product_id) references products (id),
+  constraint product_category_ibfk_2 foreign key (category_id) references category (id)
+);
+
+create index product_category_category_id_index on product_category (category_id);
+
+create index price_id on products (price_id);
