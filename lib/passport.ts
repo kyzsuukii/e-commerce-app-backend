@@ -2,6 +2,9 @@ import { FieldPacket, QueryResult } from "mysql2";
 import { ExtractJwt, Strategy } from "passport-jwt";
 import { conn } from "./db";
 import passport from "passport";
+import { config } from "dotenv";
+
+config();
 
 type Users = [
   {
