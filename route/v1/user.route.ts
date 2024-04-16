@@ -13,7 +13,7 @@ router.get("/all", passport.authenticate("jwt", { session: false }), isAdmin, as
   const db = await conn();
 
   try {
-    const [users]: any = await db.query('SELECT id, email, role FROM auth WHERE id != ?', [req.user?.id]);
+    const [users]: any = await db.query('SELECT id, email, role, address FROM auth WHERE id != ?', [req.user?.id]);
     return res.status(200).json({ users });
   } catch (error) {
     console.error("Error updating product:", error);
