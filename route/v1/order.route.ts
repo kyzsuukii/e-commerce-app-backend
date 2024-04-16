@@ -9,8 +9,6 @@ const route = express.Router();
 route.post(
   "/create",
   passport.authenticate("jwt", { session: false }),
-  body("totalAmount").isFloat({ min: 0 }).notEmpty(),
-  body("address").isString().notEmpty(),
   body("items").isArray({ min: 1 }),
   async (req, res) => {
     const errors = validationResult(req);
@@ -20,34 +18,70 @@ route.post(
 
     const customerId = req.user?.id;
 
-    const { totalAmount, address, items } = req.body;
+    const { items } = req.body;
 
     const db = await conn();
 
     try {
       await db.beginTransaction();
 
+      const [userAddressResult]: any = await db.execute(
+        "SELECT address FROM auth WHERE id = ?",
+        [customerId]
+      );
+
+      if (!userAddressResult.length || !userAddressResult[0].address) {
+        return res
+          .status(400)
+          .json({ errors: [{ msg: "Set address first on your profile" }] });
+      }
+
+      let totalAmount = 0;
+
+      for (const item of items) {
+        const { id, quantity } = item;
+
+        if (id !== undefined && quantity !== undefined) {
+          const [productPrice]: any = await db.execute(
+            "SELECT price FROM price WHERE id = (SELECT price_id FROM products WHERE id = ?)",
+            [id]
+          );
+
+          if (productPrice && productPrice.length > 0) {
+            totalAmount += productPrice[0].price * quantity;
+          } else {
+            console.error("Product price not found for product:", id);
+            return res
+              .status(400)
+              .json({ errors: [{ msg: "Product price not found" }] });
+          }
+        } else {
+          console.error("One or more item properties are undefined:", item);
+          return res
+            .status(400)
+            .json({ errors: [{ msg: "Invalid item properties" }] });
+        }
+      }
+
       const [orderResult]: any = await db.execute(
-        "INSERT INTO orders (customer_id, total_amount, address) VALUES (?, ?, ?)",
-        [customerId, totalAmount, address]
+        "INSERT INTO orders (customer_id, total_amount) VALUES (?, ?)",
+        [customerId, totalAmount]
       );
       const orderId = orderResult.insertId;
 
       for (const item of items) {
-        const { id, quantity, price } = item;
+        const { id, quantity } = item;
 
-        if (id !== undefined && quantity !== undefined && price !== undefined) {
+        if (id !== undefined && quantity !== undefined) {
           await db.execute(
-            "INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)",
-            [orderId, id, quantity, price]
+            "INSERT INTO order_items (order_id, product_id, quantity, price_id) VALUES (?, ?, ?, (SELECT price_id FROM products WHERE id = ?))",
+            [orderId, id, quantity, id]
           );
 
           await db.execute(
             "UPDATE products SET stock = stock - ? WHERE id = ?",
             [quantity, id]
           );
-        } else {
-          console.error("One or more item properties are undefined:", item);
         }
       }
 
@@ -73,13 +107,29 @@ route.get(
     const db = await conn();
     try {
       const [orders]: any = await db.execute(
-        "SELECT o.id, a.email, o.total_amount, o.address, o.order_date, o.order_status, oi.id AS order_item_id, oi.quantity, oi.price, p.name AS product_name, p.description AS product_description FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN products p ON oi.product_id = p.id JOIN auth a ON o.customer_id = a.id ORDER BY o.order_date DESC"
-      );
+        "SELECT o.id, a.email, o.total_amount, a.address, o.order_date, o.order_status, oi.id AS order_item_id, oi.quantity, pr.price, p.name AS product_name, p.description AS product_description FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN products p ON oi.product_id = p.id JOIN auth a ON o.customer_id = a.id JOIN price pr ON oi.price_id = pr.id ORDER BY o.order_date DESC"
+      );      
 
       const groupedOrders = orders.reduce((acc: any[], order: any) => {
-        const { id, email, total_amount, address, order_date, order_status, ...item } = order;
+        const {
+          id,
+          email,
+          total_amount,
+          address,
+          order_date,
+          order_status,
+          ...item
+        } = order;
         if (!acc[id]) {
-          acc[id] = { id, email, total_amount, address, order_date, order_status, items: [] };
+          acc[id] = {
+            id,
+            email,
+            total_amount,
+            address,
+            order_date,
+            order_status,
+            items: [],
+          };
         }
         acc[id].items.push(item);
         return acc;
@@ -131,9 +181,7 @@ route.put(
         return res.status(404).json({ error: "Order not found" });
       }
 
-      return res
-        .status(200)
-        .json({ msg: "Order status updated successfully" });
+      return res.status(200).json({ msg: "Order status updated successfully" });
     } catch (error) {
       console.error("Error updating order status:", error);
       return res.status(500).json({ error: "Internal server error" });
@@ -203,9 +251,7 @@ route.delete(
 
       await db.commit();
 
-      return res
-        .status(200)
-        .json({ msg: "Order item deleted successfully" });
+      return res.status(200).json({ msg: "Order item deleted successfully" });
     } catch (error) {
       await db.rollback();
       console.error("Error deleting order item:", error);
@@ -234,15 +280,32 @@ route.get(
         return res.status(200).json([]);
       }
 
-      const [orders]: any = await db.execute(
-        "SELECT o.id, o.total_amount, o.address, o.order_date, o.order_status, oi.id AS order_item_id, oi.quantity, oi.price, p.name AS product_name, p.description AS product_description FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN products p ON oi.product_id = p.id WHERE o.customer_id = ? ORDER BY o.order_date DESC",
+      const [userAddress]: any = await db.execute(
+        "SELECT address FROM auth WHERE id = ?",
         [userId]
       );
 
+      if (!userAddress.length || !userAddress[0].address) {
+        return res.status(400).json({ error: "Address not found for user" });
+      }
+
+      const [orders]: any = await db.execute(
+        "SELECT o.id, o.total_amount, ? AS address, o.order_date, o.order_status, oi.id AS order_item_id, oi.quantity, pr.price, p.name AS product_name, p.description AS product_description FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN products p ON oi.product_id = p.id JOIN price pr ON p.price_id = pr.id WHERE o.customer_id = ? ORDER BY o.order_date DESC",
+        [userAddress[0].address, userId]
+      );      
+
       const groupedOrders = orders.reduce((acc: any[], order: any) => {
-        const { id, total_amount, address, order_date, order_status, ...item } = order;
+        const { id, total_amount, address, order_date, order_status, ...item } =
+          order;
         if (!acc[id]) {
-          acc[id] = { id, total_amount, address, order_date, order_status, items: [] };
+          acc[id] = {
+            id,
+            total_amount,
+            address,
+            order_date,
+            order_status,
+            items: [],
+          };
         }
         acc[id].items.push(item);
         return acc;

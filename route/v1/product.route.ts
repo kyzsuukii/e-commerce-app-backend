@@ -51,7 +51,7 @@ route.get(
 
     try {
       let query =
-        "SELECT p.id, p.name, p.description, p.price, p.stock, p.thumbnail, GROUP_CONCAT(c.name SEPARATOR ', ') AS category FROM products p LEFT JOIN product_category pc ON p.id = pc.product_id LEFT JOIN category c ON pc.category_id = c.id GROUP BY p.id";
+        "SELECT p.id, p.name, p.description, pr.price, p.stock, p.thumbnail, GROUP_CONCAT(c.name SEPARATOR ', ') AS category FROM products p LEFT JOIN product_category pc ON p.id = pc.product_id LEFT JOIN category c ON pc.category_id = c.id JOIN price pr ON p.price_id = pr.id GROUP BY p.id";
 
       const params = [];
 
@@ -66,26 +66,32 @@ route.get(
       return res.status(200).json(products);
     } catch (error) {
       console.error("Error fetching products:", error);
-      return res.status(500).json({ errors: [{ msg: "Error fetching products" }] });
+      return res
+        .status(500)
+        .json({ errors: [{ msg: "Error fetching products" }] });
     } finally {
       await db.end();
     }
-  },
+  }
 );
 
-route.get("/search", passport.authenticate("jwt", { session: false }), query("q").isString().notEmpty(), async (req: any, res) => {
-  const result = validationResult(req);
-  if (!result.isEmpty()) {
-    return res.status(400).json({ errors: result.array() });
-  }
-  
-  const { q: query } = req.query;
+route.get(
+  "/search",
+  passport.authenticate("jwt", { session: false }),
+  query("q").isString().notEmpty(),
+  async (req: any, res) => {
+    const result = validationResult(req);
+    if (!result.isEmpty()) {
+      return res.status(400).json({ errors: result.array() });
+    }
 
-  const db = await conn();
+    const { q: query } = req.query;
+
+    const db = await conn();
 
     try {
       const [products]: any = await db.execute(
-        "SELECT p.id, p.name, p.description, p.price, p.stock, p.thumbnail, (SELECT GROUP_CONCAT(c.name SEPARATOR ', ') FROM product_category pc JOIN category c ON pc.category_id = c.id WHERE pc.product_id = p.id) AS category FROM products p WHERE p.name LIKE ?",
+        "SELECT p.id, p.name, p.description, pr.price, p.stock, p.thumbnail, (SELECT GROUP_CONCAT(c.name SEPARATOR ', ') FROM product_category pc JOIN category c ON pc.category_id = c.id WHERE pc.product_id = p.id) AS category FROM products p JOIN price pr ON p.price_id = pr.id WHERE p.name LIKE ?",
         [`%${query}%`]
       );
 
@@ -96,11 +102,14 @@ route.get("/search", passport.authenticate("jwt", { session: false }), query("q"
       return res.status(200).json(products);
     } catch (error) {
       console.error("Error fetching product:", error);
-      return res.status(500).json({ errors: [{ msg: "Error fetching product" }] });
+      return res
+        .status(500)
+        .json({ errors: [{ msg: "Error fetching product" }] });
     } finally {
       await db.end();
     }
-})
+  }
+);
 
 route.get(
   "/get/:id",
@@ -118,8 +127,8 @@ route.get(
 
     try {
       const [product]: any = await db.execute(
-        "SELECT p.id, p.name, p.description, p.price, p.stock, p.thumbnail, (SELECT GROUP_CONCAT(c.name SEPARATOR ', ') FROM product_category pc JOIN category c ON pc.category_id = c.id WHERE pc.product_id = p.id) AS category FROM products p WHERE p.id = ?",
-        [id],
+        "SELECT p.id, p.name, p.description, pr.price, p.stock, p.thumbnail, (SELECT GROUP_CONCAT(c.name SEPARATOR ', ') FROM product_category pc JOIN category c ON pc.category_id = c.id WHERE pc.product_id = p.id) AS category FROM products p JOIN price pr ON p.price_id = pr.id WHERE p.id = ?",
+        [id]
       );
 
       if (!product[0]) {
@@ -129,11 +138,13 @@ route.get(
       return res.status(200).json(product[0]);
     } catch (error) {
       console.error("Error fetching product:", error);
-      return res.status(500).json({ errors: [{ msg: "Error fetching product" }] });
+      return res
+        .status(500)
+        .json({ errors: [{ msg: "Error fetching product" }] });
     } finally {
       await db.end();
     }
-  },
+  }
 );
 route.get(
   "/category/:categoryName",
@@ -151,8 +162,8 @@ route.get(
       const { categoryName } = req.params;
 
       const [products]: any = await db.execute(
-        "SELECT p.id, p.name, p.description, p.price, p.stock, p.thumbnail, c.name AS category FROM products p JOIN product_category pc ON p.id = pc.product_id JOIN category c ON pc.category_id = c.id WHERE c.name = ?;",
-        [categoryName],
+        "SELECT p.id, p.name, p.description, pr.price, p.stock, p.thumbnail, c.name AS category FROM products p JOIN product_category pc ON p.id = pc.product_id JOIN category c ON pc.category_id = c.id JOIN price pr ON p.price_id = pr.id WHERE c.name = ?;",
+        [categoryName]
       );
 
       if (!products || products.length === 0) {
@@ -164,11 +175,13 @@ route.get(
       return res.status(200).json(products);
     } catch (error) {
       console.error("Error fetching products:", error);
-      return res.status(500).json({ errors: [{ msg: "Error fetching products" }] });
+      return res
+        .status(500)
+        .json({ errors: [{ msg: "Error fetching products" }] });
     } finally {
       await db.end();
     }
-  },
+  }
 );
 
 route.put(
@@ -198,11 +211,11 @@ route.put(
     try {
       await db.beginTransaction();
 
-      const { id, category, ...updatedFields } = req.body;
+      const { id, category, price, ...updatedFields } = req.body;
 
       const [product]: any = await db.execute(
-        "SELECT p.id, p.name, p.description, p.price, p.stock, (SELECT GROUP_CONCAT(c.name SEPARATOR ', ') FROM product_category pc JOIN category c ON pc.category_id = c.id WHERE pc.product_id = p.id) AS category_names FROM products p WHERE p.id = ? FOR UPDATE",
-        [id],
+        "SELECT p.id, p.name, p.description, p.price_id, p.stock, (SELECT GROUP_CONCAT(c.name SEPARATOR ', ') FROM product_category pc JOIN category c ON pc.category_id = c.id WHERE pc.product_id = p.id) AS category_names FROM products p WHERE p.id = ? FOR UPDATE",
+        [id]
       );
 
       if (!product[0]) {
@@ -220,29 +233,47 @@ route.put(
           category.split(",").map(async (catName: string) => {
             const [categoryResult]: any = await db.execute(
               "SELECT id FROM category WHERE name = ? FOR UPDATE",
-              [catName],
+              [catName]
             );
             if (categoryResult && categoryResult.length > 0) {
               return categoryResult[0].id;
             } else {
               const [insertResult]: any = await db.execute(
                 "INSERT INTO category (name) VALUES (?)",
-                [catName],
+                [catName]
               );
               return insertResult.insertId;
             }
-          }),
+          })
         );
 
         await Promise.all(
           categoryIds.map((categoryId: number) => {
             return db.execute(
               "INSERT INTO product_category (product_id, category_id) VALUES (?, ?)",
-              [id, categoryId],
+              [id, categoryId]
             );
-          }),
+          })
         );
       }
+
+      const [priceResult]: any = await db.execute(
+        "SELECT id FROM price WHERE price = ?",
+        [price]
+      );
+
+      let priceId;
+      if (priceResult && priceResult.length > 0) {
+        priceId = priceResult[0].id;
+      } else {
+        const [insertPriceResult]: any = await db.execute(
+          "INSERT INTO price (price) VALUES (?)",
+          [price]
+        );
+        priceId = insertPriceResult.insertId;
+      }
+
+      changedValues["price_id"] = priceId;
 
       if (Object.keys(changedValues).length > 0) {
         const setClause = Object.keys(changedValues)
@@ -252,10 +283,8 @@ route.put(
         values.push(id);
 
         await db.execute(
-          `UPDATE products
-                     SET ${setClause}
-                     WHERE id = ?`,
-          values,
+          `UPDATE products SET ${setClause} WHERE id = ?`,
+          values
         );
       }
 
@@ -264,11 +293,13 @@ route.put(
     } catch (error) {
       await db.rollback();
       console.error("Error updating product:", error);
-      return res.status(500).json({ errors: [{ msg: "Internal Server Error" }] });
+      return res
+        .status(500)
+        .json({ errors: [{ msg: "Internal Server Error" }] });
     } finally {
       await db.end();
     }
-  },
+  }
 );
 
 route.delete(
@@ -283,15 +314,24 @@ route.delete(
     }
 
     const { id } = req.body;
-    
+
     const db = await conn();
 
     try {
       await db.beginTransaction();
 
+      const [orderItemResult]: any = await db.query(
+        "SELECT COUNT(*) AS count FROM order_items WHERE product_id = ?",
+        [id]
+      );
+
+      if (orderItemResult[0].count > 0) {
+        await db.query("DELETE FROM order_items WHERE product_id = ?", [id]);
+      }
+
       const [productResult]: any = await db.query(
-        "SELECT category_id FROM product_category WHERE product_id = ?",
-        [id],
+        "SELECT category_id, price_id FROM product_category pc JOIN products p ON pc.product_id = p.id WHERE pc.product_id = ?",
+        [id]
       );
 
       if (productResult.length === 0) {
@@ -299,23 +339,32 @@ route.delete(
         return res.status(404).json({ errors: [{ msg: "Product not found" }] });
       }
 
-      const categoryId = productResult[0].category_id;
+      const { category_id: categoryId, price_id: priceId } = productResult[0];
 
       await db.query("DELETE FROM product_category WHERE product_id = ?", [id]);
 
       const [deleteProductResult]: any = await db.query(
         "DELETE FROM products WHERE id = ?",
-        [id],
+        [id]
       );
 
       if (deleteProductResult.affectedRows === 1) {
         const [categoryProductsResult]: any = await db.query(
           "SELECT COUNT(*) AS count FROM product_category WHERE category_id = ?",
-          [categoryId],
+          [categoryId]
         );
 
         if (categoryProductsResult[0].count === 0) {
           await db.query("DELETE FROM category WHERE id = ?", [categoryId]);
+        }
+
+        const [usedPriceResult]: any = await db.query(
+          "SELECT COUNT(*) AS count FROM products WHERE price_id = ?",
+          [priceId]
+        );
+
+        if (usedPriceResult[0].count === 0) {
+          await db.query("DELETE FROM price WHERE id = ?", [priceId]);
         }
 
         await db.commit();
@@ -333,7 +382,7 @@ route.delete(
     } finally {
       await db.end();
     }
-  },
+  }
 );
 
 route.post(
@@ -344,7 +393,7 @@ route.post(
   body("name").isString(),
   body("category").isString(),
   body("price")
-    .toInt()
+    .toFloat() // Mengubah ke tipe data float
     .isNumeric()
     .isLength({ min: 1, max: 6 })
     .custom((value) => value >= 0),
@@ -371,23 +420,30 @@ route.post(
     try {
       await db.beginTransaction();
 
+      const [priceResult]: any = await db.execute(
+        "INSERT INTO price (price) VALUES (?)",
+        [price]
+      );
+
+      const { insertId: priceId } = priceResult;
+
       const [productResult]: any = await db.execute(
-        "INSERT INTO products (name, description, price, stock, thumbnail) VALUES (?, ?, ?, ?, ?)",
-        [name, description, price, stock, thumbnail.path],
+        "INSERT INTO products (name, description, stock, thumbnail, price_id) VALUES (?, ?, ?, ?, ?)",
+        [name, description, stock, thumbnail.path, priceId]
       );
 
       const { insertId: productId } = productResult;
 
-      let [categoryResult]: any = await db.execute(
+      const [categoryResult]: any = await db.execute(
         "INSERT INTO category (name) VALUES (?) ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id)",
-        [category],
+        [category]
       );
 
       let categoryId = categoryResult.insertId;
 
       await db.execute(
         "INSERT INTO product_category (product_id, category_id) VALUES (?, ?)",
-        [productId, categoryId],
+        [productId, categoryId]
       );
 
       await db.commit();
@@ -397,13 +453,14 @@ route.post(
         .json({ msg: "Product uploaded and saved successfully" });
     } catch (error) {
       await db.rollback();
+      console.error("Error saving product:", error);
       return res
         .status(500)
         .json({ errors: [{ msg: "Error saving product" }] });
     } finally {
       await db.end();
     }
-  },
+  }
 );
 
 export default route;
