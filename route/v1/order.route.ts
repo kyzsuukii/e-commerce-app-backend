@@ -42,6 +42,28 @@ route.post(
         const { id, quantity } = item;
 
         if (id !== undefined && quantity !== undefined) {
+          const [productStock]: any = await db.execute(
+            "SELECT stock FROM products WHERE id = ?",
+            [id]
+          );
+
+          if (productStock && productStock.length > 0) {
+            const availableStock = productStock[0].stock;
+            if (quantity > availableStock) {
+              return res.status(400).json({
+                errors: [
+                  {
+                    msg: `Ordered quantity exceeds available stock`,
+                  },
+                ],
+              });
+            }
+          } else {
+            return res
+              .status(400)
+              .json({ errors: [{ msg: "Product stock not found" }] });
+          }
+
           const [productPrice]: any = await db.execute(
             "SELECT price FROM price WHERE id = (SELECT price_id FROM products WHERE id = ?)",
             [id]
