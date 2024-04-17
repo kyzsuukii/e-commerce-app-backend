@@ -262,7 +262,7 @@ route.delete(
       await db.beginTransaction();
 
       const [item]: any = await db.execute(
-        "SELECT order_id, price, quantity FROM order_items WHERE id = ?",
+        "SELECT order_id, product_id, quantity FROM order_items WHERE id = ?",
         [itemId]
       );
 
@@ -271,14 +271,26 @@ route.delete(
         return res.status(404).json({ error: "Order item not found" });
       }
 
-      const { order_id: orderId, price, quantity } = item[0];
+      const { order_id: orderId, product_id: productId, quantity } = item[0];
 
       await db.execute("DELETE FROM order_items WHERE id = ?", [itemId]);
 
-      await db.execute(
-        "UPDATE orders SET total_amount = total_amount - ? WHERE id = ?",
-        [price * quantity, orderId]
+      const [productStock]: any = await db.execute(
+        "SELECT stock FROM products WHERE id = ?",
+        [productId]
       );
+
+      if (productStock && productStock.length > 0) {
+        const currentStock = productStock[0].stock;
+        const newStock = currentStock + quantity;
+        await db.execute("UPDATE products SET stock = ? WHERE id = ?", [
+          newStock,
+          productId,
+        ]);
+      } else {
+        await db.rollback();
+        return res.status(404).json({ error: "Product not found" });
+      }
 
       await db.commit();
 
