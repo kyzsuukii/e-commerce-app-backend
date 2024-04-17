@@ -49,6 +49,15 @@ route.post(
 
           if (productStock && productStock.length > 0) {
             const availableStock = productStock[0].stock;
+            if (availableStock === 0) {
+              return res.status(400).json({
+                errors: [
+                  {
+                    msg: `Product with ID ${id} is out of stock`,
+                  },
+                ],
+              });
+            }
             if (quantity > availableStock) {
               return res.status(400).json({
                 errors: [
