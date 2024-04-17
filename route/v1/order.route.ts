@@ -53,7 +53,7 @@ route.post(
               return res.status(400).json({
                 errors: [
                   {
-                    msg: `Product with ID ${id} is out of stock`,
+                    msg: `Product is out of stock`,
                   },
                 ],
               });
