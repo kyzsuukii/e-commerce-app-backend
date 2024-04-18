@@ -13,7 +13,7 @@ router.get("/all", passport.authenticate("jwt", { session: false }), isAdmin, as
   const db = await conn();
 
   try {
-    const [users]: any = await db.query('SELECT id, email, role FROM auth WHERE id != ?', [req.user?.id]);
+    const [users]: any = await db.query('SELECT id, email, role, address FROM auth WHERE id != ?', [req.user?.id]);
     return res.status(200).json({ users });
   } catch (error) {
     console.error("Error updating product:", error);
@@ -22,6 +22,38 @@ router.get("/all", passport.authenticate("jwt", { session: false }), isAdmin, as
     await db.end();
   }
 })
+
+router.patch(
+  "/address",
+  passport.authenticate("jwt", { session: false }),
+  body("address").isString().notEmpty(),
+  async (req, res) => {
+    const result = validationResult(req);
+
+    if (!result.isEmpty()) {
+      return res.status(400).json({ errors: result.array() });
+    }
+
+    const { address } = req.body;
+    const userId = req.user?.id;
+
+    const db = await conn();
+
+    try {
+      await db.query("UPDATE auth SET address = ? WHERE id = ?", [
+        address,
+        userId,
+      ]);
+
+      res.json({ msg: "Address updated successfully" });
+    } catch (error) {
+      console.error("Error updating address:", error);
+      res.status(500).json({ error: "Internal server error" });
+    } finally {
+      await db.end();
+    }
+  }
+);
 
 router.patch(
   "/role",
@@ -80,8 +112,8 @@ router.get(
   "/me",
   passport.authenticate("jwt", { session: false }),
   (req: any, res) => {
-    const { id, email, role } = req.user;
-    return res.json({ id, email, role });
+    const { id, email, role, address } = req.user;
+    return res.json({ id, email, role, address });
   },
 );
 
