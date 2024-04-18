@@ -1,9 +1,9 @@
 import express from "express";
 import { body, validationResult } from "express-validator";
 import bcrypt from "bcrypt";
-import { conn } from "../../lib/db";
 import { generateJwt } from "../../lib/jwt";
 import { reCaptcha } from "../../lib/reCaptha";
+import { prisma } from "../../lib/db";
 
 const router = express.Router();
 
@@ -13,12 +13,16 @@ router.post(
   body("email")
     .isEmail()
     .custom(async (value) => {
-      const db = await conn();
-      const [rows]: any = await db.execute(
-        "SELECT email FROM auth WHERE email = ? LIMIT 1",
-        [value],
-      );
-      if (rows[0]) {
+      const email = await prisma.users.findUnique({
+        where: {
+          email: value,
+        },
+        select: {
+          email: true,
+        },
+      });
+
+      if (email) {
         throw new Error("Email already exists");
       }
     }),
@@ -39,23 +43,23 @@ router.post(
       return res.status(400).json({ errors: result.array() });
     }
 
-    const db = await conn();
-
     try {
       const salt = await bcrypt.genSalt();
       const hashPassword = await bcrypt.hash(password, salt);
-      
-      await db.execute(
-        "INSERT INTO auth (email, password) VALUE (?, ?)",
-        [email, hashPassword],
-      );
 
+      await prisma.users.create({
+        data: {
+          email,
+          password: hashPassword,
+        },
+      })
+      
       res.json({ msg: "Register success" });
     } catch (error) {
-      console.error("Error updating product:", error);
+      console.error("Error creating user:", error);
       return res.status(500).json({ errors: [{ msg: "Internal Server Error" }] });
     } finally {
-      await db.end();
+      await prisma.$disconnect();
     }
   },
 );
@@ -73,24 +77,33 @@ router.post(
       return res.status(400).json({ errors: result.array() });
     }
 
-    const db = await conn();
-
     try {
-      const [rows]: any = await db.execute(
-        "SELECT id, password, role FROM auth WHERE email = ? LIMIT 1",
-        [email],
-      );
-      if (!rows[0]) {
+      const user = await prisma.users.findUnique({
+        where: {
+          email,
+        },
+        select: {
+          id: true,
+          email: true,
+          password: true,
+          role: true,
+        },
+      })
+
+      if (!user) {
+        return res.status(404).json({ errors: [{ msg: "Account not found" }] });
+      }
+
+      if (!user?.email) {
         return res.status(404).json({ errors: [{ msg: "Email not found" }] });
       }
-      const data = rows[0];
-      const isPasswordMatch = await bcrypt.compare(password, data.password);
+      const isPasswordMatch = await bcrypt.compare(password, user.password);
       if (!isPasswordMatch) {
         return res.status(401).json({ errors: [{ msg: "Wrong password" }] });
       }
 
       const payload = {
-        id: data.id,
+        id: user?.id,
       };
 
       const jwt = generateJwt(
@@ -98,16 +111,16 @@ router.post(
         `${process.env.JWT_SECRET_KEY}`,
       );
 
-      if (data.role === "ADMIN") {
+      if (user?.role === "ADMIN") {
         res.json({ msg: "Login success", token: jwt, isAdmin: true });
       } else {
         res.json({ msg: "Login success", token: jwt });
       }
     } catch (error) {
-      console.error("Error updating product:", error);
+      console.error("Error logging in:", error);
       return res.status(500).json({ errors: [{ msg: "Internal Server Error" }] });
     } finally {
-      await db.end();
+      await prisma.$disconnect();
     }
   },
 );

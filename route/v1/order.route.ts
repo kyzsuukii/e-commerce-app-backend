@@ -1,8 +1,8 @@
 import express from "express";
 import { body, validationResult } from "express-validator";
 import passport from "passport";
-import { conn } from "../../lib/db";
 import { isAdmin } from "../../lib/utils";
+import { prisma } from "../../lib/db";
 
 const route = express.Router();
 
@@ -17,164 +17,139 @@ route.post(
     }
 
     const customerId = req.user?.id;
-
     const { items } = req.body;
 
-    const db = await conn();
-
     try {
-      await db.beginTransaction();
+      await prisma.$transaction(async (prisma) => {
+        const user = await prisma.users.findFirst({
+          where: { id: customerId },
+          select: { address: true, id: true },
+        });
 
-      const [userAddressResult]: any = await db.execute(
-        "SELECT address FROM auth WHERE id = ?",
-        [customerId]
-      );
-
-      if (!userAddressResult.length || !userAddressResult[0].address) {
-        return res
-          .status(400)
-          .json({ errors: [{ msg: "Set address first on your profile" }] });
-      }
-
-      let totalAmount = 0;
-
-      for (const item of items) {
-        const { id, quantity } = item;
-
-        if (id !== undefined && quantity !== undefined) {
-          const [productStock]: any = await db.execute(
-            "SELECT stock FROM products WHERE id = ?",
-            [id]
-          );
-
-          if (productStock && productStock.length > 0) {
-            const availableStock = productStock[0].stock;
-            if (availableStock === 0) {
-              return res.status(400).json({
-                errors: [
-                  {
-                    msg: `Product is out of stock`,
-                  },
-                ],
-              });
-            }
-            if (quantity > availableStock) {
-              return res.status(400).json({
-                errors: [
-                  {
-                    msg: `Ordered quantity exceeds available stock`,
-                  },
-                ],
-              });
-            }
-          } else {
-            return res
-              .status(400)
-              .json({ errors: [{ msg: "Product stock not found" }] });
-          }
-
-          const [productPrice]: any = await db.execute(
-            "SELECT price FROM price WHERE id = (SELECT price_id FROM products WHERE id = ?)",
-            [id]
-          );
-
-          if (productPrice && productPrice.length > 0) {
-            totalAmount += productPrice[0].price * quantity;
-          } else {
-            console.error("Product price not found for product:", id);
-            return res
-              .status(400)
-              .json({ errors: [{ msg: "Product price not found" }] });
-          }
-        } else {
-          console.error("One or more item properties are undefined:", item);
-          return res
-            .status(400)
-            .json({ errors: [{ msg: "Invalid item properties" }] });
+        if (!user || !user.address) {
+          return res.status(400).json({ errors: [{ msg: "Set address first on your profile" }] });
         }
-      }
 
-      const [orderResult]: any = await db.execute(
-        "INSERT INTO orders (customer_id, total_amount) VALUES (?, ?)",
-        [customerId, totalAmount]
-      );
-      const orderId = orderResult.insertId;
+        let totalAmount = 0;
 
-      for (const item of items) {
-        const { id, quantity } = item;
+        for (const item of items) {
+          const { id, quantity } = item;
 
-        if (id !== undefined && quantity !== undefined) {
-          await db.execute(
-            "INSERT INTO order_items (order_id, product_id, quantity, price_id) VALUES (?, ?, ?, (SELECT price_id FROM products WHERE id = ?))",
-            [orderId, id, quantity, id]
-          );
+          if (id !== undefined && quantity !== undefined) {
+            const product = await prisma.products.findFirst({
+              where: { id },
+              select: { stock: true, priceId: true },
+            });
 
-          await db.execute(
-            "UPDATE products SET stock = stock - ? WHERE id = ?",
-            [quantity, id]
-          );
+            if (!product) {
+              return res.status(400).json({ errors: [{ msg: "Product stock not found" }] });
+            }
+
+            if (product.stock === 0) {
+              return res.status(400).json({ errors: [{ msg: "Product is out of stock" }] });
+            }
+
+            if (quantity > product.stock) {
+              return res.status(400).json({ errors: [{ msg: "Ordered quantity exceeds available stock" }] });
+            }
+
+            const productPrice = await prisma.price.findFirst({
+              where: { id: product.priceId },
+              select: { price: true },
+            });
+
+            if (!productPrice) {
+              console.error("Product price not found for product:", id);
+              return res.status(400).json({ errors: [{ msg: "Product price not found" }] });
+            }
+
+            totalAmount += productPrice.price * quantity;
+          } else {
+            console.error("One or more item properties are undefined:", item);
+            return res.status(400).json({ errors: [{ msg: "Invalid item properties" }] });
+          }
         }
-      }
 
-      await db.commit();
-      return res
-        .status(200)
-        .json({ msg: "Order created successfully", orderId });
+        const newOrder = await prisma.orders.create({
+          data: { customerId: user.id, totalAmount },
+        });
+        const orderId = newOrder.id;
+
+        for (const item of items) {
+          const { id, quantity } = item;
+
+          if (id !== undefined && quantity !== undefined) {
+            await prisma.orderItems.create({
+              data: {
+                orderId,
+                productId: id,
+                quantity,
+                priceId: id,
+              },
+            });
+
+            await prisma.products.update({
+              where: { id },
+              data: { stock: { decrement: quantity } },
+            });
+          }
+        }
+      });
+
+      return res.status(200).json({ msg: "Order created successfully" });
     } catch (error) {
-      await db.rollback();
       console.error("Error creating order:", error);
-      res.status(500).json({ error: "Internal server error" });
-    } finally {
-      await db.end();
+      return res.status(500).json({ error: "Internal server error" });
     }
   }
 );
+
 
 route.get(
   "/all",
   passport.authenticate("jwt", { session: false }),
   isAdmin,
   async (req, res) => {
-    const db = await conn();
     try {
-      const [orders]: any = await db.execute(
-        "SELECT o.id, a.email, o.total_amount, a.address, o.order_date, o.order_status, oi.id AS order_item_id, oi.quantity, pr.price, p.name AS product_name, p.description AS product_description FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN products p ON oi.product_id = p.id JOIN auth a ON o.customer_id = a.id JOIN price pr ON oi.price_id = pr.id ORDER BY o.order_date DESC"
-      );      
-
-      const groupedOrders = orders.reduce((acc: any[], order: any) => {
-        const {
-          id,
-          email,
-          total_amount,
-          address,
-          order_date,
-          order_status,
-          ...item
-        } = order;
-        if (!acc[id]) {
-          acc[id] = {
-            id,
-            email,
-            total_amount,
-            address,
-            order_date,
-            order_status,
-            items: [],
-          };
+      const orders = await prisma.orders.findMany({
+        orderBy: { orderDate: 'desc' },
+        include: {
+          customer: { select: { email: true, address: true } },
+          orderItems: {
+            include: {
+              product: {
+                select: { name: true, description: true },
+                include: { price: { select: { price: true } } }
+              }
+            }
+          }
         }
-        acc[id].items.push(item);
-        return acc;
-      }, {});
+      });
 
-      return res.status(200).json(Object.values(groupedOrders));
+      const r = orders.map(order => ({
+        id: order.id,
+        email: order.customer.email,
+        total_amount: order.totalAmount,
+        address: order.customer.address,
+        order_date: order.orderDate,
+        order_status: order.status,
+        items: order.orderItems.map(({ id, quantity, product: { price, name, description } }) => ({
+          order_item_id: id,
+          quantity,
+          price: price.price,
+          product_name: name,
+          product_description: description
+        }))
+      }));
+
+      return res.status(200).json(r);
     } catch (error) {
       console.error("Error getting orders:", error);
       return res.status(500).json({ error: "Internal server error" });
-    } finally {
-      await db.end();
     }
   }
 );
+
 
 route.put(
   "/status",
@@ -183,32 +158,28 @@ route.put(
   async (req, res) => {
     const { orderStatus: status, orderId } = req.body;
 
-    const db = await conn();
-
     try {
-      const [order]: any = await db.execute(
-        "SELECT order_status FROM orders WHERE id = ? LIMIT 1",
-        [orderId]
-      );
+      const order = await prisma.orders.findFirst({
+        where: { id: orderId },
+        select: { status: true }
+      });
 
-      if (!order || order.length === 0) {
+      if (!order) {
         return res.status(404).json({ error: "Order not found" });
       }
 
-      const currentStatus = order[0].order_status;
+      const currentStatus = order.status;
 
       if (currentStatus === status) {
-        return res
-          .status(400)
-          .json({ error: "Status is already set to the provided value" });
+        return res.status(400).json({ error: "Status is already set to the provided value" });
       }
 
-      const [result]: any = await db.execute(
-        "UPDATE orders SET order_status = ? WHERE id = ?",
-        [status, orderId]
-      );
+      const result = await prisma.orders.update({
+        where: { id: orderId },
+        data: { status }
+      });
 
-      if (result.affectedRows === 0) {
+      if (!result) {
         return res.status(404).json({ error: "Order not found" });
       }
 
@@ -216,8 +187,6 @@ route.put(
     } catch (error) {
       console.error("Error updating order status:", error);
       return res.status(500).json({ error: "Internal server error" });
-    } finally {
-      await db.end();
     }
   }
 );
@@ -228,26 +197,21 @@ route.delete(
   isAdmin,
   async (req, res) => {
     const { orderId } = req.body;
-    const db = await conn();
 
     try {
-      await db.beginTransaction();
-
-      await db.execute("DELETE FROM order_items WHERE order_id = ?", [orderId]);
-      await db.execute("DELETE FROM orders WHERE id = ?", [orderId]);
-
-      await db.commit();
+      await prisma.$transaction(async (prisma) => {
+        await prisma.orderItems.deleteMany({ where: { orderId } });
+        await prisma.orders.delete({ where: { id: orderId } });
+      });
 
       return res.status(200).json({ msg: "Order deleted successfully" });
     } catch (error) {
-      await db.rollback();
       console.error("Error deleting order:", error);
       return res.status(500).json({ error: "Internal server error" });
-    } finally {
-      await db.end();
     }
   }
 );
+
 
 route.delete(
   "/item/delete",
@@ -256,54 +220,47 @@ route.delete(
   async (req, res) => {
     const { orderItemId: itemId } = req.body;
 
-    const db = await conn();
-
     try {
-      await db.beginTransaction();
+      const item = await prisma.orderItems.findFirst({
+        where: { id: itemId },
+        select: { orderId: true, productId: true, quantity: true }
+      });
 
-      const [item]: any = await db.execute(
-        "SELECT order_id, product_id, quantity FROM order_items WHERE id = ?",
-        [itemId]
-      );
-
-      if (!item || item.length === 0) {
-        await db.rollback();
+      if (!item) {
         return res.status(404).json({ error: "Order item not found" });
       }
 
-      const { order_id: orderId, product_id: productId, quantity } = item[0];
+      const { orderId, productId, quantity } = item;
 
-      await db.execute("DELETE FROM order_items WHERE id = ?", [itemId]);
+      await prisma.$transaction(async (prisma) => {
+        await prisma.orderItems.delete({ where: { id: itemId } });
 
-      const [productStock]: any = await db.execute(
-        "SELECT stock FROM products WHERE id = ?",
-        [productId]
-      );
+        const product = await prisma.products.findUnique({
+          where: { id: productId },
+          select: { stock: true }
+        });
 
-      if (productStock && productStock.length > 0) {
-        const currentStock = productStock[0].stock;
+        if (!product) {
+          throw new Error("Product not found");
+        }
+
+        const currentStock = product.stock;
         const newStock = currentStock + quantity;
-        await db.execute("UPDATE products SET stock = ? WHERE id = ?", [
-          newStock,
-          productId,
-        ]);
-      } else {
-        await db.rollback();
-        return res.status(404).json({ error: "Product not found" });
-      }
 
-      await db.commit();
+        await prisma.products.update({
+          where: { id: productId },
+          data: { stock: newStock }
+        });
+      });
 
       return res.status(200).json({ msg: "Order item deleted successfully" });
     } catch (error) {
-      await db.rollback();
       console.error("Error deleting order item:", error);
       return res.status(500).json({ error: "Internal server error" });
-    } finally {
-      await db.end();
     }
   }
 );
+
 
 route.get(
   "/get",
@@ -311,55 +268,64 @@ route.get(
   async (req, res) => {
     const userId = req.user?.id;
 
-    const db = await conn();
-
     try {
-      const [existingOrders]: any = await db.execute(
-        "SELECT id FROM orders WHERE customer_id = ? LIMIT 1",
-        [userId]
-      );
+      const existingOrders = await prisma.orders.findFirst({
+        where: { customerId: userId },
+        select: { id: true }
+      });
 
-      if (!existingOrders.length) {
+      if (!existingOrders) {
         return res.status(200).json([]);
       }
 
-      const [userAddress]: any = await db.execute(
-        "SELECT address FROM auth WHERE id = ?",
-        [userId]
-      );
+      const userAddress = await prisma.users.findFirst({
+        where: { id: userId },
+        select: { address: true }
+      });
 
-      if (!userAddress.length || !userAddress[0].address) {
+      if (!userAddress || !userAddress.address) {
         return res.status(400).json({ error: "Address not found for user" });
       }
 
-      const [orders]: any = await db.execute(
-        "SELECT o.id, o.total_amount, ? AS address, o.order_date, o.order_status, oi.id AS order_item_id, oi.quantity, pr.price, p.name AS product_name, p.description AS product_description FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN products p ON oi.product_id = p.id JOIN price pr ON p.price_id = pr.id WHERE o.customer_id = ? ORDER BY o.order_date DESC",
-        [userAddress[0].address, userId]
-      );      
-
-      const groupedOrders = orders.reduce((acc: any[], order: any) => {
-        const { id, total_amount, address, order_date, order_status, ...item } =
-          order;
-        if (!acc[id]) {
-          acc[id] = {
-            id,
-            total_amount,
-            address,
-            order_date,
-            order_status,
-            items: [],
-          };
+      const orders = await prisma.orders.findMany({
+        where: { customerId: userId },
+        orderBy: { orderDate: 'desc' },
+        include: {
+          orderItems: {
+            select: {
+              id: true,
+              quantity: true,
+              price: { select: { price: true } },
+              product: {
+                select: {
+                  name: true,
+                  description: true
+                }
+              }
+            }
+          }
         }
-        acc[id].items.push(item);
-        return acc;
-      }, {});
+      });
 
-      return res.status(200).json(Object.values(groupedOrders));
+      const formattedOrders = orders.map(order => ({
+        id: order.id,
+        total_amount: order.totalAmount,
+        address: userAddress.address,
+        order_date: order.orderDate,
+        order_status: order.status,
+        items: order.orderItems.map(item => ({
+          order_item_id: item.id,
+          quantity: item.quantity,
+          price: item.price.price,
+          product_name: item.product.name,
+          product_description: item.product.description
+        }))
+      }));
+
+      return res.status(200).json(formattedOrders);
     } catch (error) {
       console.error("Error getting orders:", error);
       return res.status(500).json({ error: "Internal server error" });
-    } finally {
-      await db.end();
     }
   }
 );

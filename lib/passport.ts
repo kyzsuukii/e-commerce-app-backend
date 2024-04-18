@@ -1,19 +1,10 @@
 import { FieldPacket, QueryResult } from "mysql2";
 import { ExtractJwt, Strategy } from "passport-jwt";
-import { conn } from "./db";
 import passport from "passport";
 import { config } from "dotenv";
+import { prisma } from "./db";
 
 config();
-
-type Users = [
-  {
-    id: number;
-    email: string;
-    password: string;
-  }
-] &
-  QueryResult;
 
 const jwtOptions = {
   jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -22,15 +13,15 @@ const jwtOptions = {
 
 export const passportJwt = passport.use(
   new Strategy(jwtOptions, async (payload, done) => {
-    const db = await conn();
 
     try {
-      const [users]: [Users, FieldPacket[]] = await db.execute(
-        `SELECT * FROM auth WHERE id = ? LIMIT 1`,
-        [payload.id]
-      );
-      if (users[0]) {
-        return done(null, users[0]);
+      const users = await prisma.users.findFirst({
+        where: {
+          id: payload.id
+        }
+      })
+      if (users) {
+        return done(null, users);
       } else {
         return done(null, false);
       }

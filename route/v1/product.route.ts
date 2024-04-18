@@ -2,9 +2,9 @@ import express from "express";
 import passport from "passport";
 import multer from "multer";
 import * as path from "path";
-import { conn } from "../../lib/db";
 import { body, param, query, validationResult } from "express-validator";
 import { findChangedValues, isAdmin } from "../../lib/utils.ts";
+import { prisma } from "../../lib/db.ts";
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = [
@@ -45,32 +45,47 @@ route.get(
   "/all",
   passport.authenticate("jwt", { session: false }),
   async (req: any, res) => {
-    const { limit: queryLimit } = req.query;
-
-    const db = await conn();
+    const { limit: q } = req.query;
 
     try {
-      let query =
-        "SELECT p.id, p.name, p.description, pr.price, p.stock, p.thumbnail, GROUP_CONCAT(c.name SEPARATOR ', ') AS category FROM products p LEFT JOIN product_category pc ON p.id = pc.product_id LEFT JOIN category c ON pc.category_id = c.id JOIN price pr ON p.price_id = pr.id GROUP BY p.id";
+      const p = await prisma.productCategory.findMany({
+        take: q ? parseInt(q) : undefined,
+        include: {
+          product: {
+            include: {
+              price: {
+                select: {
+                  price: true
+                }
+              },
+            }
+          },
+          category: {
+            select: {
+              category: true
+            }
+          },
+        },
+      })
 
-      const params = [];
+      const r = p.map(({ product, category }) => ({
+        id: product.id,
+        name: product.name,
+        description: product.description,
+        price: product.price.price,
+        stock: product.stock,
+        thumbnail: product.thumbnail,
+        category: category.category
+      }));
 
-      const limit = parseInt(queryLimit, 10);
-      if (!isNaN(limit) && limit > 0) {
-        query += " LIMIT ?";
-        params.push(limit);
-      }
-
-      const [products]: any = await db.execute(query, params);
-
-      return res.status(200).json(products);
+      return res.status(200).json(r);
     } catch (error) {
       console.error("Error fetching products:", error);
       return res
         .status(500)
         .json({ errors: [{ msg: "Error fetching products" }] });
     } finally {
-      await db.end();
+      await prisma.$disconnect();
     }
   }
 );
@@ -85,17 +100,13 @@ route.get(
       return res.status(400).json({ errors: result.array() });
     }
 
-    const { q: query } = req.query;
+    const { q } = req.query;
 
-    const db = await conn();
 
     try {
-      const [products]: any = await db.execute(
-        "SELECT p.id, p.name, p.description, pr.price, p.stock, p.thumbnail, (SELECT GROUP_CONCAT(c.name SEPARATOR ', ') FROM product_category pc JOIN category c ON pc.category_id = c.id WHERE pc.product_id = p.id) AS category FROM products p JOIN price pr ON p.price_id = pr.id WHERE p.name LIKE ?",
-        [`%${query}%`]
-      );
+      const products = await prisma.$queryRaw`SELECT p.*, pr.price, c.category FROM products AS p JOIN price AS pr ON p.priceId = pr.id JOIN product_category AS pc ON p.id = pc.productId JOIN category AS c ON pc.categoryId = c.id WHERE p.name LIKE  CONCAT('%', ${q}, '%')`
 
-      if (!products[0]) {
+      if (!products) {
         return res.status(404).json({ errors: [{ msg: "Product not found" }] });
       }
 
@@ -106,7 +117,7 @@ route.get(
         .status(500)
         .json({ errors: [{ msg: "Error fetching product" }] });
     } finally {
-      await db.end();
+      await prisma.$disconnect();
     }
   }
 );
@@ -123,63 +134,108 @@ route.get(
 
     const { id } = req.params;
 
-    const db = await conn();
-
     try {
-      const [product]: any = await db.execute(
-        "SELECT p.id, p.name, p.description, pr.price, p.stock, p.thumbnail, (SELECT GROUP_CONCAT(c.name SEPARATOR ', ') FROM product_category pc JOIN category c ON pc.category_id = c.id WHERE pc.product_id = p.id) AS category FROM products p JOIN price pr ON p.price_id = pr.id WHERE p.id = ?",
-        [id]
-      );
+      const p = await prisma.productCategory.findFirst({
+        where: {
+          productId: parseInt(id),
+        },
+        include: {
+          product: {
+            include: {
+              price: {
+                select: {
+                  price: true
+                }
+              },
+            }
+          },
+          category: {
+            select: {
+              category: true
+            }
+          },
+        },
+      })
 
-      if (!product[0]) {
+      if (!p) {
         return res.status(404).json({ errors: [{ msg: "Product not found" }] });
       }
 
-      return res.status(200).json(product[0]);
+      const { product, category } = p;
+      const r = {
+        id: product.id,
+        name: product.name,
+        description: product.description,
+        price: product.price.price,
+        stock: product.stock,
+        thumbnail: product.thumbnail,
+        category: category.category,
+      };
+
+      return res.status(200).json(r);
     } catch (error) {
       console.error("Error fetching product:", error);
       return res
         .status(500)
         .json({ errors: [{ msg: "Error fetching product" }] });
     } finally {
-      await db.end();
+      await prisma.$disconnect();
     }
   }
 );
 route.get(
-  "/category/:categoryName",
+  "/category/:category",
   passport.authenticate("jwt", { session: false }),
-  param("categoryName").isString().notEmpty(),
+  param("category").isString().notEmpty(),
   async (req: any, res) => {
     const result = validationResult(req);
     if (!result.isEmpty()) {
       return res.status(400).json({ errors: result.array() });
     }
-
-    const db = await conn();
+    
+    const { category } = req.params;
 
     try {
-      const { categoryName } = req.params;
+      const p = await prisma.productCategory.findMany({
+        where: {
+          category
+        },
+        include: {
+          product: {
+            include: {
+              price: {
+                select: {
+                  price: true
+                }
+              },
+            }
+          },
+          category: {
+            select: {
+              category: true
+            }
+          },
+        },
+      })
 
-      const [products]: any = await db.execute(
-        "SELECT p.id, p.name, p.description, pr.price, p.stock, p.thumbnail, c.name AS category FROM products p JOIN product_category pc ON p.id = pc.product_id JOIN category c ON pc.category_id = c.id JOIN price pr ON p.price_id = pr.id WHERE c.name = ?;",
-        [categoryName]
-      );
+      const r = p.map(({ product, category }) => ({
+        id: product.id,
+        name: product.name,
+        description: product.description,
+        price: product.price.price,
+        stock: product.stock,
+        thumbnail: product.thumbnail,
+        category: category.category
+      }));
 
-      if (!products || products.length === 0) {
-        return res
-          .status(404)
-          .json({ errors: [{ msg: "No products found for the category" }] });
-      }
-
-      return res.status(200).json(products);
+      return res.status(200).json(r);
     } catch (error) {
       console.error("Error fetching products:", error);
       return res
         .status(500)
         .json({ errors: [{ msg: "Error fetching products" }] });
     } finally {
-      await db.end();
+      await prisma.$disconnect();
     }
   }
 );
@@ -191,113 +247,81 @@ route.put(
   body("id").isInt(),
   body("name").isString(),
   body("category").isString(),
-  body("price")
-    .isNumeric()
-    .isLength({ min: 1, max: 6 })
-    .custom((value) => value >= 0),
-  body("stock")
-    .isNumeric()
-    .isLength({ min: 1, max: 3 })
-    .custom((value) => value >= 0),
+  body("price").toInt().isNumeric().isLength({ min: 1, max: 6 }).custom((value) => value >= 0),
+  body("stock").toInt().isNumeric().isLength({ min: 1, max: 3 }).custom((value) => value >= 0),
   body("description").isString(),
-  async (req: any, res) => {
+  async (req, res) => {
     const result = validationResult(req);
     if (!result.isEmpty()) {
       return res.status(400).json({ errors: result.array() });
     }
 
-    const db = await conn();
-
     try {
-      await db.beginTransaction();
+      await prisma.$transaction(async (prisma) => {
+        const { id, category, price, ...updatedFields } = req.body;
 
-      const { id, category, price, ...updatedFields } = req.body;
+        const product = await prisma.products.findFirst({
+          where: { id: parseInt(id) },
+          include: {
+            category: {
+              select: {
+                category: {
+                  select: {
+                    category: true,
+                  },
+                },
+              },
+            },
+            price: {
+              select: {
+                price: true,
+              },
+            },
+          },
+        });
 
-      const [product]: any = await db.execute(
-        "SELECT p.id, p.name, p.description, p.price_id, p.stock, (SELECT GROUP_CONCAT(c.name SEPARATOR ', ') FROM product_category pc JOIN category c ON pc.category_id = c.id WHERE pc.product_id = p.id) AS category_names FROM products p WHERE p.id = ? FOR UPDATE",
-        [id]
-      );
+        if (!product) {
+          return res.status(404).json({ errors: [{ msg: "Product not found" }] });
+        }
 
-      if (!product[0]) {
-        return res.status(404).json({ errors: [{ msg: "Product not found" }] });
-      }
+        const changedValues = findChangedValues(product, updatedFields);
 
-      const changedValues = findChangedValues(product[0], updatedFields);
+        if (category) {
+          await prisma.productCategory.deleteMany({ where: { productId: parseInt(id) } });
 
-      if (category) {
-        await db.execute("DELETE FROM product_category WHERE product_id = ?", [
-          id,
-        ]);
+          const existingCategory = await prisma.category.findFirst({ where: { category } });
+          const categoryId = existingCategory
+            ? existingCategory.id
+            : (await prisma.category.create({ data: { category } })).id;
 
-        const categoryIds: number[] = await Promise.all(
-          category.split(",").map(async (catName: string) => {
-            const [categoryResult]: any = await db.execute(
-              "SELECT id FROM category WHERE name = ? FOR UPDATE",
-              [catName]
-            );
-            if (categoryResult && categoryResult.length > 0) {
-              return categoryResult[0].id;
-            } else {
-              const [insertResult]: any = await db.execute(
-                "INSERT INTO category (name) VALUES (?)",
-                [catName]
-              );
-              return insertResult.insertId;
-            }
-          })
-        );
+          await prisma.productCategory.create({
+            data: { productId: parseInt(id), categoryId },
+          });
+        }
 
-        await Promise.all(
-          categoryIds.map((categoryId: number) => {
-            return db.execute(
-              "INSERT INTO product_category (product_id, category_id) VALUES (?, ?)",
-              [id, categoryId]
-            );
-          })
-        );
-      }
+        let priceId;
+        const priceRecord = await prisma.price.findFirst({ where: { price: parseFloat(price) } });
+        if (priceRecord) {
+          priceId = priceRecord.id;
+        } else {
+          const newPrice = await prisma.price.create({ data: { price: parseFloat(price) } });
+          priceId = newPrice.id;
+        }
 
-      const [priceResult]: any = await db.execute(
-        "SELECT id FROM price WHERE price = ?",
-        [price]
-      );
+        changedValues.priceId = priceId;
 
-      let priceId;
-      if (priceResult && priceResult.length > 0) {
-        priceId = priceResult[0].id;
-      } else {
-        const [insertPriceResult]: any = await db.execute(
-          "INSERT INTO price (price) VALUES (?)",
-          [price]
-        );
-        priceId = insertPriceResult.insertId;
-      }
+        if (Object.keys(changedValues).length > 0) {
+          await prisma.products.update({
+            where: { id: parseInt(id) },
+            data: changedValues,
+          });
+        }
+      });
 
-      changedValues["price_id"] = priceId;
-
-      if (Object.keys(changedValues).length > 0) {
-        const setClause = Object.keys(changedValues)
-          .map((key) => `${key} = ?`)
-          .join(", ");
-        const values = Object.values(changedValues);
-        values.push(id);
-
-        await db.execute(
-          `UPDATE products SET ${setClause} WHERE id = ?`,
-          values
-        );
-      }
-
-      await db.commit();
       return res.status(200).json({ msg: "Product updated successfully" });
     } catch (error) {
-      await db.rollback();
       console.error("Error updating product:", error);
-      return res
-        .status(500)
-        .json({ errors: [{ msg: "Internal Server Error" }] });
-    } finally {
-      await db.end();
+      return res.status(500).json({ errors: [{ msg: "Internal Server Error" }] });
     }
   }
 );
@@ -307,7 +331,7 @@ route.delete(
   passport.authenticate("jwt", { session: false }),
   isAdmin,
   body("id").isInt().notEmpty(),
-  async (req: any, res) => {
+  async (req, res) => {
     const result = validationResult(req);
     if (!result.isEmpty()) {
       return res.status(400).json({ errors: result.array() });
@@ -315,72 +339,58 @@ route.delete(
 
     const { id } = req.body;
 
-    const db = await conn();
-
     try {
-      await db.beginTransaction();
+      await prisma.$transaction(async (prisma) => {
+        const orderItemCount = await prisma.orderItems.count({
+          where: { productId: parseInt(id) },
+        });
 
-      const [orderItemResult]: any = await db.query(
-        "SELECT COUNT(*) AS count FROM order_items WHERE product_id = ?",
-        [id]
-      );
-
-      if (orderItemResult[0].count > 0) {
-        await db.query("DELETE FROM order_items WHERE product_id = ?", [id]);
-      }
-
-      const [productResult]: any = await db.query(
-        "SELECT category_id, price_id FROM product_category pc JOIN products p ON pc.product_id = p.id WHERE pc.product_id = ?",
-        [id]
-      );
-
-      if (productResult.length === 0) {
-        await db.rollback();
-        return res.status(404).json({ errors: [{ msg: "Product not found" }] });
-      }
-
-      const { category_id: categoryId, price_id: priceId } = productResult[0];
-
-      await db.query("DELETE FROM product_category WHERE product_id = ?", [id]);
-
-      const [deleteProductResult]: any = await db.query(
-        "DELETE FROM products WHERE id = ?",
-        [id]
-      );
-
-      if (deleteProductResult.affectedRows === 1) {
-        const [categoryProductsResult]: any = await db.query(
-          "SELECT COUNT(*) AS count FROM product_category WHERE category_id = ?",
-          [categoryId]
-        );
-
-        if (categoryProductsResult[0].count === 0) {
-          await db.query("DELETE FROM category WHERE id = ?", [categoryId]);
+        if (orderItemCount > 0) {
+          await prisma.orderItems.deleteMany({ where: { productId: parseInt(id) } });
         }
 
-        const [usedPriceResult]: any = await db.query(
-          "SELECT COUNT(*) AS count FROM products WHERE price_id = ?",
-          [priceId]
-        );
+        const product = await prisma.productCategory.findFirst({
+          where: { productId: parseInt(id) },
+          include: {
+            product: {
+              select: {
+                priceId: true
+              }
+            }
+          }
+        });
 
-        if (usedPriceResult[0].count === 0) {
-          await db.query("DELETE FROM price WHERE id = ?", [priceId]);
+        if (!product) {
+          return res.status(404).json({ errors: [{ msg: "Product not found" }] });
         }
 
-        await db.commit();
-        return res.json({ message: "Product deleted successfully" });
-      } else {
-        await db.rollback();
-        return res.status(404).json({ errors: [{ msg: "Product not found" }] });
-      }
+        await prisma.productCategory.deleteMany({ where: { productId: parseInt(id) } });
+
+        await prisma.products.delete({
+          where: { id: parseInt(id) },
+        });
+
+        const categoryProductsCount = await prisma.productCategory.count({
+          where: { categoryId: product.categoryId },
+        });
+
+        if (categoryProductsCount === 0) {
+          await prisma.category.delete({ where: { id: product.categoryId } });
+        }
+
+        const usedPriceCount = await prisma.products.count({
+          where: { priceId: product.product.priceId },
+        });
+
+        if (usedPriceCount === 0) {
+          await prisma.price.delete({ where: { id: product.product.priceId } });
+        }
+      });
+
+      return res.json({ message: "Product deleted successfully" });
     } catch (error) {
       console.error("Error deleting product:", error);
-      await db.rollback();
-      return res
-        .status(500)
-        .json({ errors: [{ msg: "Internal server error" }] });
-    } finally {
-      await db.end();
+      return res.status(500).json({ errors: [{ msg: "Internal server error" }] });
     }
   }
 );
@@ -392,18 +402,10 @@ route.post(
   upload.single("thumbnail"),
   body("name").isString(),
   body("category").isString(),
-  body("price")
-    .toFloat() // Mengubah ke tipe data float
-    .isNumeric()
-    .isLength({ min: 1, max: 6 })
-    .custom((value) => value >= 0),
-  body("stock")
-    .toInt()
-    .isNumeric()
-    .isLength({ min: 1, max: 3 })
-    .custom((value) => value >= 0),
+  body("price").isNumeric().isLength({ min: 1, max: 6 }).custom((value) => value >= 0),
+  body("stock").toInt().isNumeric().isLength({ min: 1, max: 3 }).custom((value) => value >= 0),
   body("description").isString(),
-  async (req: any, res) => {
+  async (req, res) => {
     const result = validationResult(req);
     if (!result.isEmpty()) {
       return res.status(400).json({ errors: result.array() });
@@ -415,52 +417,50 @@ route.post(
     const thumbnail = req.file;
     const { name, category, description, price, stock } = req.body;
 
-    const db = await conn();
-
     try {
-      await db.beginTransaction();
+      await prisma.$transaction(async (prisma) => {
+        const newPrice = await prisma.price.create({
+          data: { price: parseFloat(price) },
+        });
 
-      const [priceResult]: any = await db.execute(
-        "INSERT INTO price (price) VALUES (?)",
-        [price]
-      );
+        const newProduct = await prisma.products.create({
+          data: {
+            name,
+            description,
+            stock: parseInt(stock),
+            thumbnail: thumbnail.path,
+            priceId: newPrice.id,
+          },
+        });
 
-      const { insertId: priceId } = priceResult;
+        let categoryId;
+        const existingCategory = await prisma.category.findFirst({
+          where: { category },
+        });
+        if (existingCategory) {
+          categoryId = existingCategory.id;
+        } else {
+          const newCategory = await prisma.category.create({
+            data: { category },
+          });
+          categoryId = newCategory.id;
+        }
 
-      const [productResult]: any = await db.execute(
-        "INSERT INTO products (name, description, stock, thumbnail, price_id) VALUES (?, ?, ?, ?, ?)",
-        [name, description, stock, thumbnail.path, priceId]
-      );
+        await prisma.productCategory.create({
+          data: {
+            productId: newProduct.id,
+            categoryId,
+          },
+        });
+      });
 
-      const { insertId: productId } = productResult;
-
-      const [categoryResult]: any = await db.execute(
-        "INSERT INTO category (name) VALUES (?) ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id)",
-        [category]
-      );
-
-      let categoryId = categoryResult.insertId;
-
-      await db.execute(
-        "INSERT INTO product_category (product_id, category_id) VALUES (?, ?)",
-        [productId, categoryId]
-      );
-
-      await db.commit();
-
-      return res
-        .status(200)
-        .json({ msg: "Product uploaded and saved successfully" });
+      return res.status(200).json({ msg: "Product uploaded and saved successfully" });
     } catch (error) {
-      await db.rollback();
       console.error("Error saving product:", error);
-      return res
-        .status(500)
-        .json({ errors: [{ msg: "Error saving product" }] });
-    } finally {
-      await db.end();
+      return res.status(500).json({ errors: [{ msg: "Error saving product" }] });
     }
   }
 );
+
 
 export default route;
