@@ -1,0 +1,106 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Users {
+  id       Int      @id @default(autoincrement())
+  email    String   @unique @db.VarChar(100)
+  password String   @db.VarChar(100)
+  role     Role     @default(CUSTOMER)
+  address  String?
+  orders   Orders[]
+
+  @@map("users")
+}
+
+model Price {
+  id         Int          @id @default(autoincrement())
+  price      Int
+  products   Products[]
+  orderItems OrderItems[]
+
+  @@map("price")
+}
+
+model Products {
+  id          Int               @id @default(autoincrement())
+  name        String
+  description String            @db.Text
+  priceId     Int
+  price       Price             @relation(fields: [priceId], references: [id])
+  stock       Int
+  thumbnail   String            @db.VarChar(100)
+  category    ProductCategory[]
+  orderItems  OrderItems[]
+
+  @@map("products")
+}
+
+model Category {
+  id       Int               @id @default(autoincrement())
+  category String            @db.VarChar(100)
+  products ProductCategory[]
+
+  @@map("category")
+}
+
+model ProductCategory {
+  productId  Int
+  product    Products @relation(fields: [productId], references: [id])
+  categoryId Int
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  @@id([productId, categoryId])
+  @@map("product_category")
+}
+
+model Orders {
+  id          Int          @id @default(autoincrement())
+  customerId  Int
+  customer    Users        @relation(fields: [customerId], references: [id])
+  orderDate   DateTime     @default(now())
+  updateAt    DateTime     @updatedAt
+  totalAmount Int
+  status      Status       @default(PENDING)
+  orderItems  OrderItems[]
+
+  @@map("orders")
+}
+
+model OrderItems {
+  id        Int      @id @default(autoincrement())
+  orderId   Int
+  orders    Orders   @relation(fields: [orderId], references: [id])
+  productId Int
+  product   Products @relation(fields: [productId], references: [id])
+  quantity  Int
+  priceId   Int
+  price     Price    @relation(fields: [priceId], references: [id])
+
+  @@map("order_items")
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+enum Status {
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  COMPLETED
+  CANCELED
+}
