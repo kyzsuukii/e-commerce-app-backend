@@ -234,6 +234,14 @@ route.delete(
       await prisma.$transaction(async (prisma) => {
         await prisma.orderItems.delete({ where: { id: itemId } });
 
+        const remainingItems = await prisma.orderItems.findMany({
+          where: { orderId: orderId }
+        });
+        
+        if (remainingItems.length === 0) {
+          await prisma.orders.delete({ where: { id: orderId } });
+        }
+
         const product = await prisma.products.findUnique({
           where: { id: productId },
           select: { stock: true }
