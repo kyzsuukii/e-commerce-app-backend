@@ -118,7 +118,6 @@ route.get(
           orderItems: {
             include: {
               product: {
-                select: { name: true, description: true },
                 include: { price: { select: { price: true } } }
               }
             }
